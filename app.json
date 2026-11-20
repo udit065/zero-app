@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "zero",
-    "slug": "snack-40e601a2-7d91-410b-8b96-6b167618025f",
+    "name": "ZERO",
+    "slug": "zero",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -18,11 +18,6 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    },
-    "extra": {
-      "eas": {
-        "projectId": "e1613616-2c4c-4305-a9ac-c2ed0c61c591"
-      }
     },
     "plugins": [
       "expo-status-bar",
@@ -62,6 +57,12 @@
           ]
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "adfa3561-608e-4479-8326-344b151f6cd1"
+      }
+    },
+    "owner": "udityadav133"
   }
 }

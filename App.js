@@ -30,6 +30,7 @@ import {
   addDays,
   defaultConfig,
   migrateDay,
+  migrateConfig,
   buildDay,
   daysBetween,
   REVIEW_EVERY_DAYS,
@@ -89,7 +90,7 @@ function Zero() {
         AsyncStorage.getItem(KEYS.history),
         AsyncStorage.getItem(KEYS.todos),
       ]);
-      const cfg = rawConfig ? JSON.parse(rawConfig) : defaultConfig(t);
+      const cfg = migrateConfig(rawConfig ? JSON.parse(rawConfig) : defaultConfig(t));
       if (!cfg.reminder) cfg.reminder = DEFAULT_REMINDER;
       const hist = {};
       Object.entries(rawHistory ? JSON.parse(rawHistory) : {}).forEach(

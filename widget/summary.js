@@ -1,7 +1,16 @@
 // Builds the data shown on the home-screen widget. No widget-library imports here,
 // so this file is safe to use inside Expo Go.
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getToday, defaultConfig, migrateDay, buildDay, dayScore, unitsOf, noZeroStreak } from '../lib/zero';
+import {
+  getToday,
+  defaultConfig,
+  migrateDay,
+  migrateConfig,
+  buildDay,
+  dayScore,
+  unitsOf,
+  noZeroStreak,
+} from '../lib/zero';
 
 export const summaryFrom = (config, history, today) => {
   const day = history[today] || buildDay(config, today);
@@ -22,7 +31,7 @@ export const loadSummary = async () => {
     AsyncStorage.getItem('zeroConfig'),
     AsyncStorage.getItem('zeroData'),
   ]);
-  const config = rawConfig ? JSON.parse(rawConfig) : defaultConfig(today);
+  const config = migrateConfig(rawConfig ? JSON.parse(rawConfig) : defaultConfig(today));
   const history = {};
   Object.entries(rawHistory ? JSON.parse(rawHistory) : {}).forEach(
     ([date, d]) => (history[date] = migrateDay(d))

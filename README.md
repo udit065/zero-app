@@ -60,6 +60,19 @@ npx expo start
 ```
 Scan the QR code with **Expo Go** on your phone, or press `a` for an Android emulator or `i` for the iOS simulator.
 
+Expo Go can't show the home-screen widget; for that, install the APK below.
+
+## 📲 Install on Android (APK)
+The app is built with [EAS Build](https://docs.expo.dev/build/introduction/) (Expo project `@udityadav133/zero`).
+```bash
+npm install -g eas-cli
+eas login
+eas build -p android --profile preview
+```
+When the build finishes, open the link it prints on your phone, download the `.apk` and install it (allow "Install unknown apps" for your browser if asked). Before rebuilding with a new version, bump `version` in `app.json`.
+
+To add the widget: long-press your home screen → **Widgets** → **ZERO** → drag out **ZERO · Today**.
+
 ## 🎯 Customizing your tasks
 Open **Goals** from the menu to edit goals and tasks. Changes apply from today onward, and past days keep their history. The starting tasks are set in `defaultConfig` in `lib/zero.js`.
 
