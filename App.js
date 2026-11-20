@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -7,141 +7,121 @@ import {
   ScrollView,
   ActivityIndicator,
   Dimensions,
+  AppState,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import HomeScreen from './components/HomeScreen';
+import TodoScreen from './components/TodoScreen';
 import AnalyticsScreen from './components/AnalyticsScreen';
 import GoalsScreen from './components/GoalsScreen';
 import QuotesScreen from './components/QuotesScreen';
+import {
+  getToday,
+  defaultConfig,
+  migrateDay,
+  buildDay,
+  daysBetween,
+  REVIEW_EVERY_DAYS,
+} from './lib/zero';
 
-const getToday = () => new Date().toISOString().split('T')[0];
 const SCREEN_WIDTH = Dimensions.get('window').width;
+const MENU = ['HOME', 'TODO', 'GOALS', 'QUOTES', 'ANALYTICS'];
 
-const MENU = ['HOME', 'GOALS', 'QUOTES', 'ANALYTICS'];
-
-const initialTasks = {
-  'Become INCREADIBLY RICH': [
-    { id: 1, title: 'Solve 2 DSA questions', done: false },
-    { id: 2, title: '45 min JavaScript learning', done: false },
-  ],
-  'Become INCREADIBLY MUSCULAR': [
-    { id: 3, title: 'Predefined workout', done: false },
-  ],
-  'Become INCREADIBLY INTELLIGENT': [
-    { id: 4, title: 'Read 10 pages', done: false },
-    { id: 5, title: '30 min podcast/audiobook', done: false },
-  ],
-  'Become SOCIAL': [
-    { id: 6, title: 'Talk to someone new / meaningful', done: false },
-  ],
-};
+const KEYS = { config: 'zeroConfig', history: 'zeroData', todos: 'zeroTodos' };
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('HOME');
   const [menuOpen, setMenuOpen] = useState(false);
-  const [tasks, setTasks] = useState(initialTasks);
-  const [expanded, setExpanded] = useState({});
   const [loading, setLoading] = useState(true);
-  const [weeklyScore, setWeeklyScore] = useState([]);
+  const [today, setToday] = useState(getToday());
 
-  const today = getToday();
+  const [config, setConfig] = useState(null);
+  const [history, setHistory] = useState({});
+  const [todos, setTodos] = useState([]);
+  const [expanded, setExpanded] = useState({});
+
+  // Nothing is written to storage until loading has finished, so
+  // saved progress can never be overwritten by the defaults.
+  const loaded = useRef(false);
 
   useEffect(() => {
     loadData();
+    // Pick up a new day when the app comes back to the foreground.
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s === 'active') setToday(getToday());
+    });
+    return () => sub.remove();
   }, []);
 
-  useEffect(() => {
-    saveTodayData();
-  }, [tasks]);
-
   const loadData = async () => {
+    const t = getToday();
     try {
-      const data = await AsyncStorage.getItem('zeroData');
+      const [rawConfig, rawHistory, rawTodos] = await Promise.all([
+        AsyncStorage.getItem(KEYS.config),
+        AsyncStorage.getItem(KEYS.history),
+        AsyncStorage.getItem(KEYS.todos),
+      ]);
+      const cfg = rawConfig ? JSON.parse(rawConfig) : defaultConfig(t);
+      const hist = {};
+      Object.entries(rawHistory ? JSON.parse(rawHistory) : {}).forEach(
+        ([date, day]) => (hist[date] = migrateDay(day))
+      );
+      hist[t] = buildDay(cfg, t, hist[t]);
 
-      if (data) {
-        const parsed = JSON.parse(data);
-
-        if (parsed[today]) {
-          const todayData = parsed[today];
-
-          //  Merge new categories
-          const merged = { ...initialTasks };
-
-          Object.keys(initialTasks).forEach((category) => {
-            if (todayData[category]) {
-              merged[category] = todayData[category];
-            }
-          });
-
-          setTasks(merged);
-        } else {
-          parsed[today] = initialTasks;
-          await AsyncStorage.setItem('zeroData', JSON.stringify(parsed));
-          setTasks(initialTasks);
-        }
-
-        calculateWeekly(parsed);
-      } else {
-        const newData = { [today]: initialTasks };
-        await AsyncStorage.setItem('zeroData', JSON.stringify(newData));
-        setTasks(initialTasks);
-      }
+      setConfig(cfg);
+      setHistory(hist);
+      setTodos(rawTodos ? JSON.parse(rawTodos) : []);
     } catch (e) {
       console.log(e);
-      setTasks(initialTasks);
+      const cfg = defaultConfig(t);
+      setConfig(cfg);
+      setHistory({ [t]: buildDay(cfg, t) });
     } finally {
+      loaded.current = true;
       setTimeout(() => setLoading(false), 800);
     }
   };
 
-  const saveTodayData = async () => {
-    try {
-      const data = await AsyncStorage.getItem('zeroData');
-      const parsed = data ? JSON.parse(data) : {};
+  // Keep today's list in sync with the goals config and the date.
+  useEffect(() => {
+    if (!config) return;
+    setHistory((h) => ({ ...h, [today]: buildDay(config, today, h[today]) }));
+  }, [config, today]);
 
-      parsed[today] = tasks;
+  // Persist each piece separately.
+  useEffect(() => {
+    if (loaded.current && config)
+      AsyncStorage.setItem(KEYS.config, JSON.stringify(config)).catch(console.log);
+  }, [config]);
+  useEffect(() => {
+    if (loaded.current)
+      AsyncStorage.setItem(KEYS.history, JSON.stringify(history)).catch(console.log);
+  }, [history]);
+  useEffect(() => {
+    if (loaded.current)
+      AsyncStorage.setItem(KEYS.todos, JSON.stringify(todos)).catch(console.log);
+  }, [todos]);
 
-      await AsyncStorage.setItem('zeroData', JSON.stringify(parsed));
-      calculateWeekly(parsed);
-    } catch (e) {
-      console.log(e);
-    }
-  };
+  const updateToday = (fn) =>
+    setHistory((h) => ({ ...h, [today]: fn(h[today]) }));
 
-  const calculateWeekly = (data) => {
-    const dates = Object.keys(data).sort().reverse().slice(0, 7);
-
-    const scores = dates.map((date) => {
-      const dayTasks = Object.values(data[date]).flat();
-      const done = dayTasks.filter((t) => t.done).length;
-      return { date, done, total: dayTasks.length };
-    });
-
-    setWeeklyScore(scores);
-  };
-
-  const toggleTask = (category, id) => {
-    const updated = { ...tasks };
-    updated[category] = updated[category].map((task) =>
-      task.id === id ? { ...task, done: !task.done } : task
-    );
-    setTasks(updated);
-  };
-
-  const toggleCategory = (category) => {
-    setExpanded((prev) => ({
-      ...prev,
-      [category]: !prev[category],
+  const setTaskCount = (id, count) =>
+    updateToday((day) => ({
+      ...day,
+      tasks: day.tasks.map((t) =>
+        t.id === id ? { ...t, count: Math.max(0, Math.min(count, t.target)) } : t
+      ),
     }));
-  };
 
-  const totalTasks = Object.values(tasks).flat().length;
-  const completedTasks = Object.values(tasks)
-    .flat()
-    .filter((t) => t.done).length;
+  const setExtra = (extra) => updateToday((day) => ({ ...day, extra }));
 
-  if (loading) {
+  const markReviewed = () => setConfig((c) => ({ ...c, lastReview: today }));
+
+  const toggleCategory = (goalId) =>
+    setExpanded((prev) => ({ ...prev, [goalId]: !prev[goalId] }));
+
+  if (loading || !config || !history[today]) {
     return (
       <View style={styles.splash}>
         <Text style={styles.splashTitle}>ZERO</Text>
@@ -151,57 +131,58 @@ export default function App() {
     );
   }
 
+  const reviewDue =
+    daysBetween(config.lastReview || today, today) >= REVIEW_EVERY_DAYS;
+
   return (
     <View style={styles.container}>
-      {/* 🔝 Top Bar */}
+      {/* Top Bar */}
       <View style={styles.topBar}>
         <TouchableOpacity onPress={() => setMenuOpen(true)}>
           <Text style={styles.menuIcon}>☰</Text>
         </TouchableOpacity>
-
         <Text style={styles.logo}>ZERO</Text>
-
         <View style={{ width: 20 }} />
       </View>
 
-      {/* 📱 Screens */}
-      <ScrollView>
+      {/* Screens */}
+      <ScrollView keyboardShouldPersistTaps="handled">
         {activeTab === 'HOME' && (
           <HomeScreen
-            tasks={tasks}
+            day={history[today]}
             expanded={expanded}
-            toggleTask={toggleTask}
             toggleCategory={toggleCategory}
-            completedTasks={completedTasks}
-            totalTasks={totalTasks}
+            setTaskCount={setTaskCount}
+            setExtra={setExtra}
+            reviewDue={reviewDue}
+            onReview={() => setActiveTab('GOALS')}
+            onReviewDismiss={markReviewed}
           />
         )}
-
-        {activeTab === 'ANALYTICS' && (
-          <AnalyticsScreen
-            weeklyScore={weeklyScore}
-            completedTasks={completedTasks}
-            totalTasks={totalTasks}
+        {activeTab === 'TODO' && <TodoScreen todos={todos} setTodos={setTodos} />}
+        {activeTab === 'GOALS' && (
+          <GoalsScreen
+            config={config}
+            setConfig={setConfig}
+            today={today}
+            markReviewed={markReviewed}
           />
         )}
-
-        {activeTab === 'GOALS' && <GoalsScreen />}
         {activeTab === 'QUOTES' && <QuotesScreen />}
+        {activeTab === 'ANALYTICS' && (
+          <AnalyticsScreen history={history} today={today} />
+        )}
       </ScrollView>
 
-      {/* 🔥 Drawer Menu */}
+      {/* Drawer Menu */}
       {menuOpen && (
         <>
-          {/* Overlay */}
           <TouchableOpacity
             style={styles.overlay}
             onPress={() => setMenuOpen(false)}
           />
-
-          {/* Drawer */}
           <View style={styles.drawer}>
             <Text style={styles.drawerTitle}>ZERO</Text>
-
             {MENU.map((item) => (
               <TouchableOpacity
                 key={item}
@@ -210,7 +191,13 @@ export default function App() {
                   setMenuOpen(false);
                 }}
                 style={styles.drawerItem}>
-                <Text style={styles.drawerText}>{item}</Text>
+                <Text
+                  style={[
+                    styles.drawerText,
+                    activeTab === item && styles.drawerTextActive,
+                  ]}>
+                  {item}
+                </Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -221,31 +208,15 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0b0b0b',
-    paddingTop: 40,
-  },
-
+  container: { flex: 1, backgroundColor: '#0b0b0b', paddingTop: 40 },
   splash: {
     flex: 1,
     backgroundColor: '#0b0b0b',
     justifyContent: 'center',
     alignItems: 'center',
   },
-
-  splashTitle: {
-    color: '#fff',
-    fontSize: 40,
-    fontWeight: 'bold',
-  },
-
-  splashTagline: {
-    color: '#777',
-    marginBottom: 10,
-  },
-
-  // 🔝 Top Bar
+  splashTitle: { color: '#fff', fontSize: 40, fontWeight: 'bold' },
+  splashTagline: { color: '#777', marginBottom: 10 },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -253,19 +224,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     marginBottom: 10,
   },
-
-  menuIcon: {
-    color: '#fff',
-    fontSize: 22,
-  },
-
-  logo: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '700',
-  },
-
-  // 🔥 Drawer
+  menuIcon: { color: '#fff', fontSize: 22 },
+  logo: { color: '#fff', fontSize: 18, fontWeight: '700' },
   drawer: {
     position: 'absolute',
     left: 0,
@@ -276,23 +236,10 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingHorizontal: 20,
   },
-
-  drawerTitle: {
-    color: '#fff',
-    fontSize: 22,
-    fontWeight: 'bold',
-    marginBottom: 20,
-  },
-
-  drawerItem: {
-    paddingVertical: 14,
-  },
-
-  drawerText: {
-    color: '#ddd',
-    fontSize: 16,
-  },
-
+  drawerTitle: { color: '#fff', fontSize: 22, fontWeight: 'bold', marginBottom: 20 },
+  drawerItem: { paddingVertical: 14 },
+  drawerText: { color: '#ddd', fontSize: 16 },
+  drawerTextActive: { color: '#4caf50', fontWeight: '700' },
   overlay: {
     position: 'absolute',
     width: '100%',
