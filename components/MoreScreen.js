@@ -192,7 +192,7 @@ export default function MoreScreen({
         </View>
         <Text style={[type.small, { flex: 1, marginLeft: space.md }]}>
           {widgetAvailable
-            ? 'Long-press your home screen → Widgets → ZERO, and drag “ZERO · Today” out. It shows today’s ring and your streak.'
+            ? 'Long-press your home screen → Widgets → ZERO, and pick a layout: Buddy (small, with streak), Ring (square) or Today (slim bar).'
             : 'Available in the installed app (APK), not in Expo Go. Once installed: long-press home screen → Widgets → ZERO.'}
         </Text>
       </Card>

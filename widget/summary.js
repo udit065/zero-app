@@ -21,6 +21,8 @@ export const summaryFrom = (config, history, today) => {
     done: units.filter((u) => u.progress >= 1).length + (extraSet && day.extra.done ? 1 : 0),
     total: units.length + (extraSet ? 1 : 0),
     streak: noZeroStreak(history, today),
+    // Hour of the last refresh, so the widget's nudge can change through the day.
+    hour: new Date().getHours(),
   };
 };
 

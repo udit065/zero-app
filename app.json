@@ -44,13 +44,35 @@
         {
           "widgets": [
             {
+              "name": "ZeroBuddy",
+              "label": "ZERO · Buddy",
+              "description": "Streak and a nudge, with the O buddy",
+              "minWidth": "110dp",
+              "minHeight": "50dp",
+              "targetCellWidth": 2,
+              "targetCellHeight": 1,
+              "resizeMode": "horizontal|vertical",
+              "updatePeriodMillis": 1800000
+            },
+            {
+              "name": "ZeroRing",
+              "label": "ZERO · Ring",
+              "description": "Today's ring and streak",
+              "minWidth": "110dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 2,
+              "targetCellHeight": 2,
+              "resizeMode": "horizontal|vertical",
+              "updatePeriodMillis": 1800000
+            },
+            {
               "name": "ZeroToday",
               "label": "ZERO · Today",
-              "description": "Today's progress and streak",
-              "minWidth": "180dp",
-              "minHeight": "100dp",
-              "targetCellWidth": 3,
-              "targetCellHeight": 2,
+              "description": "Slim bar with tasks done and streak",
+              "minWidth": "250dp",
+              "minHeight": "50dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 1,
               "resizeMode": "horizontal|vertical",
               "updatePeriodMillis": 1800000
             }
