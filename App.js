@@ -23,8 +23,11 @@ import ProgressRing from './components/ProgressRing';
 import { tap } from './components/ui';
 import { colors, space } from './lib/theme';
 import { applyReminder, DEFAULT_REMINDER } from './lib/notifications';
+import { updateWidget } from './lib/widget';
+import { summaryFrom } from './widget/summary';
 import {
   getToday,
+  addDays,
   defaultConfig,
   migrateDay,
   buildDay,
@@ -62,6 +65,8 @@ function Zero() {
   const [history, setHistory] = useState({});
   const [todos, setTodos] = useState([]);
   const [reminderStatus, setReminderStatus] = useState(null);
+  // Today, or yesterday for catching up on progress you forgot to log.
+  const [viewing, setViewing] = useState('today');
 
   // Nothing is written to storage until loading has finished, so
   // saved progress can never be overwritten by the defaults.
@@ -124,6 +129,12 @@ function Zero() {
       });
   }, [reminderKey]);
 
+  // Keep the home-screen widget in sync (no-op in Expo Go).
+  useEffect(() => {
+    if (loaded.current && config && history[today])
+      updateWidget(summaryFrom(config, history, today));
+  }, [history, config, today]);
+
   // Persist each piece separately.
   useEffect(() => {
     if (loaded.current && config)
@@ -138,17 +149,41 @@ function Zero() {
       AsyncStorage.setItem(KEYS.todos, JSON.stringify(todos)).catch(console.log);
   }, [todos]);
 
-  const updateToday = (fn) => setHistory((h) => ({ ...h, [today]: fn(h[today]) }));
+  const yesterday = addDays(today, -1);
+  const viewDate = viewing === 'yesterday' ? yesterday : today;
+  // A day you never opened the app on is built from your current goals.
+  const dayFor = (date) => history[date] || (config ? buildDay(config, date) : null);
 
-  const setTaskCount = (id, count) =>
-    updateToday((day) => ({
-      ...day,
-      tasks: day.tasks.map((t) =>
-        t.id === id ? { ...t, count: Math.max(0, Math.min(count, t.target)) } : t
-      ),
+  const updateDay = (fn) =>
+    setHistory((h) => ({
+      ...h,
+      [viewDate]: fn(h[viewDate] || buildDay(config, viewDate)),
     }));
 
-  const setExtra = (extra) => updateToday((day) => ({ ...day, extra }));
+  const updateTask = (id, patch) =>
+    updateDay((day) => ({
+      ...day,
+      tasks: day.tasks.map((t) => (t.id === id ? { ...t, ...patch(t) } : t)),
+    }));
+
+  const setTaskCount = (id, count) =>
+    updateTask(id, (t) => ({ count: Math.max(0, Math.min(count, t.target)) }));
+
+  const setTaskMin = (id, minDone) => updateTask(id, () => ({ minDone }));
+
+  const setExtra = (extra) => updateDay((day) => ({ ...day, extra }));
+
+  const dismissWeekly = (start) => setConfig((c) => ({ ...c, weeklyDismissed: start }));
+
+  // Replace everything (except to-dos) with a backup.
+  const restoreBackup = (backup) => {
+    const cfg = { ...backup.config, reminder: backup.config.reminder || DEFAULT_REMINDER };
+    const hist = { ...backup.history };
+    hist[today] = buildDay(cfg, today, hist[today]);
+    setConfig(cfg);
+    setHistory(hist);
+    setViewing('today');
+  };
   const markReviewed = () => setConfig((c) => ({ ...c, lastReview: today }));
   const setReminder = (reminder) => setConfig((c) => ({ ...c, reminder }));
 
@@ -182,10 +217,16 @@ function Zero() {
           {activeTab === 'HOME' && (
             <HomeScreen
               today={today}
-              day={history[today]}
+              viewDate={viewDate}
+              viewing={viewing}
+              setViewing={setViewing}
+              day={dayFor(viewDate)}
               history={history}
               setTaskCount={setTaskCount}
+              setTaskMin={setTaskMin}
               setExtra={setExtra}
+              weeklyDismissed={config.weeklyDismissed}
+              onDismissWeekly={dismissWeekly}
               reviewDue={reviewDue}
               onReview={() => goTo('GOALS')}
               onReviewDismiss={markReviewed}
@@ -208,6 +249,10 @@ function Zero() {
               reminder={config.reminder}
               setReminder={setReminder}
               reminderStatus={reminderStatus}
+              config={config}
+              history={history}
+              today={today}
+              onRestore={restoreBackup}
             />
           )}
         </ScrollView>

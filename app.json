@@ -42,6 +42,25 @@
           "icon": "./assets/notification-icon.png",
           "color": "#4cc764"
         }
+      ],
+      "expo-sharing",
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "ZeroToday",
+              "label": "ZERO · Today",
+              "description": "Today's progress and streak",
+              "minWidth": "180dp",
+              "minHeight": "100dp",
+              "targetCellWidth": 3,
+              "targetCellHeight": 2,
+              "resizeMode": "horizontal|vertical",
+              "updatePeriodMillis": 1800000
+            }
+          ]
+        }
       ]
     ]
   }

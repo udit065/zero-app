@@ -4,7 +4,17 @@ import { Ionicons } from '@expo/vector-icons';
 import ProgressRing from './ProgressRing';
 import { Card, Check, ProgressBar, Stepper, SectionLabel, Button, tap, success } from './ui';
 import { colors, space, radius, type, progressColor } from '../lib/theme';
-import { dayScore, stepFor, unitsOf, noZeroStreak, taskProgress } from '../lib/zero';
+import {
+  dayScore,
+  stepFor,
+  unitsOf,
+  noZeroStreak,
+  taskProgress,
+  weekStart,
+  weekSummary,
+  addDays,
+  weekdayOf,
+} from '../lib/zero';
 import { quoteOfTheDay } from '../lib/quotes';
 
 const greeting = () => {
@@ -25,10 +35,16 @@ const motivation = (score) => {
 
 export default function HomeScreen({
   today,
+  viewDate,
+  viewing,
+  setViewing,
   day,
   history,
   setTaskCount,
+  setTaskMin,
   setExtra,
+  weeklyDismissed,
+  onDismissWeekly,
   reviewDue,
   onReview,
   onReviewDismiss,
@@ -46,13 +62,24 @@ export default function HomeScreen({
   const done =
     units.filter((u) => u.progress >= 1).length + (extraSet && day.extra.done ? 1 : 0);
   const streak = noZeroStreak(history, today);
+  const isToday = viewing === 'today';
 
-  // Celebrate the moment the day hits 100%.
-  const prevScore = useRef(score);
+  // Celebrate the moment the day hits 100% (not when switching days).
+  const prev = useRef({ score, viewDate });
   useEffect(() => {
-    if (prevScore.current < 1 && score >= 1) success();
-    prevScore.current = score;
-  }, [score]);
+    if (prev.current.viewDate === viewDate && prev.current.score < 1 && score >= 1) success();
+    prev.current = { score, viewDate };
+  }, [score, viewDate]);
+
+  // Weekly summary: on Sunday for this week, on Monday for last week.
+  const wd = weekdayOf(today);
+  const summaryStart =
+    wd === 0 ? weekStart(today) : wd === 1 ? weekStart(addDays(today, -1)) : null;
+  const weekly =
+    isToday && summaryStart && weeklyDismissed !== summaryStart
+      ? weekSummary(history, summaryStart, today)
+      : null;
+  const prevWeek = weekly ? weekSummary(history, addDays(summaryStart, -7), today) : null;
 
   // Group today's units by goal, keeping goal order.
   const goals = [];
@@ -70,7 +97,7 @@ export default function HomeScreen({
     setExtraDraft('');
   };
 
-  const [y, m, d] = today.split('-').map(Number);
+  const [y, m, d] = viewDate.split('-').map(Number);
   const dateLabel = new Date(y, m - 1, d).toLocaleDateString('en-GB', {
     weekday: 'long',
     day: 'numeric',
@@ -81,11 +108,49 @@ export default function HomeScreen({
   return (
     <View>
       <View style={styles.header}>
-        <Text style={type.caption}>{dateLabel}</Text>
-        <Text style={type.display}>{greeting()}</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={type.caption}>{dateLabel}</Text>
+          <Text style={type.display}>{isToday ? greeting() : 'Yesterday'}</Text>
+        </View>
+        <View style={styles.segment}>
+          {['yesterday', 'today'].map((v) => (
+            <Pressable
+              key={v}
+              onPress={() => {
+                if (v !== viewing) tap();
+                setViewing(v);
+              }}
+              style={[styles.segmentBtn, viewing === v && styles.segmentOn]}>
+              <Text style={[styles.segmentText, viewing === v && styles.segmentTextOn]}>
+                {v === 'today' ? 'Today' : 'Yesterday'}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
       </View>
 
-      {reviewDue && (
+      {!isToday && (
+        <Card style={styles.catchUp}>
+          <Ionicons name="time-outline" size={18} color={colors.accent} />
+          <Text style={styles.catchUpText}>
+            Catching up on yesterday. Log what you actually did; it updates your stats and streak.
+          </Text>
+        </Card>
+      )}
+
+      {weekly && (
+        <WeeklyCard
+          weekly={weekly}
+          prevWeek={prevWeek}
+          isSunday={wd === 0}
+          onDismiss={() => {
+            tap();
+            onDismissWeekly(summaryStart);
+          }}
+        />
+      )}
+
+      {isToday && reviewDue && (
         <Card style={styles.review}>
           <View style={styles.row}>
             <Ionicons name="calendar" size={18} color={colors.warn} />
@@ -110,7 +175,9 @@ export default function HomeScreen({
           sublabel={`${done} of ${total}`}
         />
         <View style={styles.heroText}>
-          <Text style={styles.heroTitle}>{motivation(score)}</Text>
+          <Text style={styles.heroTitle}>
+            {isToday ? motivation(score) : score > 0 ? 'Yesterday counted.' : 'Nothing logged yet.'}
+          </Text>
           <View style={[styles.pill, streak > 0 && styles.pillActive]}>
             <Ionicons
               name="flame"
@@ -165,9 +232,19 @@ export default function HomeScreen({
             {!isCollapsed &&
               g.units.map((u) =>
                 u.group && u.tasks.length > 1 ? (
-                  <PickOneGroup key={u.key} unit={u} setTaskCount={setTaskCount} />
+                  <PickOneGroup
+                    key={u.key}
+                    unit={u}
+                    setTaskCount={setTaskCount}
+                    setTaskMin={setTaskMin}
+                  />
                 ) : (
-                  <TaskRow key={u.key} task={u.tasks[0]} setTaskCount={setTaskCount} />
+                  <TaskRow
+                    key={u.key}
+                    task={u.tasks[0]}
+                    setTaskCount={setTaskCount}
+                    setTaskMin={setTaskMin}
+                  />
                 )
               )}
           </Card>
@@ -176,7 +253,7 @@ export default function HomeScreen({
 
       {/* One flexible task per day */}
       <Card>
-        <SectionLabel>Today I'll also…</SectionLabel>
+        <SectionLabel>{isToday ? "Today I'll also…" : 'Yesterday I also…'}</SectionLabel>
         {extraSet ? (
           <Pressable
             style={styles.taskRow}
@@ -214,7 +291,7 @@ export default function HomeScreen({
         )}
       </Card>
 
-      {openTodos > 0 && (
+      {isToday && openTodos > 0 && (
         <Pressable onPress={onOpenTodos}>
           <Card style={[styles.row, { paddingVertical: space.md }]}>
             <Ionicons name="checkbox-outline" size={20} color={colors.textMuted} />
@@ -226,16 +303,77 @@ export default function HomeScreen({
         </Pressable>
       )}
 
-      <View style={styles.quote}>
-        <Ionicons name="chatbubble-ellipses-outline" size={16} color={colors.accent} />
-        <Text style={styles.quoteText}>“{quote.text}”</Text>
-      </View>
+      {isToday && (
+        <View style={styles.quote}>
+          <Ionicons name="chatbubble-ellipses-outline" size={16} color={colors.accent} />
+          <Text style={styles.quoteText}>“{quote.text}”</Text>
+        </View>
+      )}
     </View>
   );
 }
 
+// Sunday / Monday recap of the week.
+function WeeklyCard({ weekly, prevWeek, isSunday, onDismiss }) {
+  const pct = (v) => `${Math.round(v * 100)}%`;
+  const diff = Math.round((weekly.average - prevWeek.average) * 100);
+  const hasPrev = prevWeek.trackedDays > 0;
+  return (
+    <Card style={styles.weekly}>
+      <View style={styles.row}>
+        <Ionicons name="calendar-number" size={18} color={colors.accent} />
+        <Text style={[type.heading, { flex: 1, marginLeft: space.sm }]}>
+          {isSunday ? 'Your week so far' : 'Last week'}
+        </Text>
+        <TouchableOpacity onPress={onDismiss} hitSlop={10}>
+          <Ionicons name="close" size={18} color={colors.textFaint} />
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.weekStats}>
+        <View style={styles.weekStat}>
+          <Text style={styles.weekValue}>{pct(weekly.average)}</Text>
+          <Text style={styles.weekLabel}>average</Text>
+        </View>
+        <View style={styles.weekStat}>
+          <Text
+            style={[
+              styles.weekValue,
+              hasPrev && { color: diff >= 0 ? colors.accent : colors.danger },
+            ]}>
+            {hasPrev ? `${diff >= 0 ? '+' : ''}${diff}%` : '–'}
+          </Text>
+          <Text style={styles.weekLabel}>vs week before</Text>
+        </View>
+        <View style={styles.weekStat}>
+          <Text style={styles.weekValue}>{weekly.perfectDays}</Text>
+          <Text style={styles.weekLabel}>100% days</Text>
+        </View>
+      </View>
+
+      {weekly.best && (
+        <Text style={styles.weekLine}>
+          <Text style={{ color: colors.accent }}>Strongest: </Text>
+          {weekly.best.name} ({pct(weekly.best.value)})
+        </Text>
+      )}
+      {weekly.weakest && weekly.weakest.name !== weekly.best?.name && (
+        <Text style={styles.weekLine}>
+          <Text style={{ color: colors.warn }}>Needs care: </Text>
+          {weekly.weakest.name} ({pct(weekly.weakest.value)})
+        </Text>
+      )}
+      {weekly.zeroDays > 0 && (
+        <Text style={[styles.weekLine, { color: colors.textFaint }]}>
+          {weekly.zeroDays} zero day{weekly.zeroDays > 1 ? 's' : ''}. Repair, don’t repeat.
+        </Text>
+      )}
+    </Card>
+  );
+}
+
 // A "pick one" group: doing any one option completes it.
-function PickOneGroup({ unit, setTaskCount }) {
+function PickOneGroup({ unit, setTaskCount, setTaskMin }) {
   const full = unit.progress >= 1;
   const chosen = unit.tasks.find((t) => t.count >= t.target);
 
@@ -258,16 +396,23 @@ function PickOneGroup({ unit, setTaskCount }) {
               <View style={styles.orLine} />
             </View>
           )}
-          <TaskRow task={t} setTaskCount={setTaskCount} dim={full && t !== chosen} nested />
+          <TaskRow
+            task={t}
+            setTaskCount={setTaskCount}
+            setTaskMin={setTaskMin}
+            dim={full && t !== chosen}
+            nested
+          />
         </View>
       ))}
     </View>
   );
 }
 
-function TaskRow({ task, setTaskCount, dim, nested }) {
+function TaskRow({ task, setTaskCount, setTaskMin, dim, nested }) {
   const p = taskProgress(task);
   const full = p >= 1;
+  const showMin = !!task.min && !full;
 
   return (
     <Pressable
@@ -288,6 +433,25 @@ function TaskRow({ task, setTaskCount, dim, nested }) {
             {task.unit ? ` ${task.unit}` : ''}
           </Text>
         )}
+        {showMin && (
+          <TouchableOpacity
+            onPress={() => {
+              tap();
+              setTaskMin(task.id, !task.minDone);
+            }}
+            hitSlop={6}
+            style={[styles.minChip, task.minDone && styles.minChipOn]}>
+            <Ionicons
+              name={task.minDone ? 'shield-checkmark' : 'shield-outline'}
+              size={12}
+              color={task.minDone ? colors.warn : colors.textMuted}
+            />
+            <Text style={[styles.minText, task.minDone && { color: colors.warn }]}>
+              {task.minDone ? 'Minimum done: ' : 'Bad day? Minimum: '}
+              {task.min}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
       {task.target > 1 && (
         <Stepper
@@ -303,7 +467,51 @@ function TaskRow({ task, setTaskCount, dim, nested }) {
 }
 
 const styles = StyleSheet.create({
-  header: { marginTop: space.sm, marginBottom: space.lg },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    marginTop: space.sm,
+    marginBottom: space.lg,
+  },
+  segment: {
+    flexDirection: 'row',
+    backgroundColor: colors.surface,
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    padding: 3,
+    marginBottom: 4,
+  },
+  segmentBtn: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.pill },
+  segmentOn: { backgroundColor: colors.surfaceHigh },
+  segmentText: { color: colors.textFaint, fontSize: 12, fontWeight: '700' },
+  segmentTextOn: { color: colors.text },
+  catchUp: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.accentSoft,
+    borderColor: 'rgba(76,199,100,0.3)',
+    paddingVertical: space.md,
+  },
+  catchUpText: { ...type.small, color: '#bfe8c7', flex: 1, marginLeft: space.sm },
+  weekly: { borderColor: 'rgba(76,199,100,0.3)' },
+  weekStats: { flexDirection: 'row', marginTop: space.lg, marginBottom: space.md },
+  weekStat: { flex: 1, alignItems: 'center' },
+  weekValue: { color: colors.text, fontSize: 22, fontWeight: '800' },
+  weekLabel: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
+  weekLine: { ...type.small, marginTop: 4 },
+  minChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: colors.surfaceHigh,
+    borderRadius: radius.pill,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginTop: 6,
+  },
+  minChipOn: { backgroundColor: colors.warnSoft },
+  minText: { color: colors.textMuted, fontSize: 11, fontWeight: '600', marginLeft: 4 },
   row: { flexDirection: 'row', alignItems: 'center' },
 
   review: { backgroundColor: colors.warnSoft, borderColor: 'rgba(232,163,61,0.35)' },

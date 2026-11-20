@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, Switch, TouchableOpacity, StyleSheet, Linking } from 'react-native';
+import { View, Text, Switch, TouchableOpacity, StyleSheet, Linking, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ScreenHeader, Card, SectionLabel, RoundButton, Button, Chip, tap } from './ui';
 import { colors, space, radius, type } from '../lib/theme';
 import { formatTime, sendTestNotification } from '../lib/notifications';
 import { QUOTES } from '../lib/quotes';
+import { exportBackup, pickBackup } from '../lib/backup';
+import { widgetAvailable } from '../lib/widget';
 
 const PRESETS = [
   { label: '8:00 PM', hour: 20, minute: 0 },
@@ -12,9 +14,59 @@ const PRESETS = [
   { label: '10:30 PM', hour: 22, minute: 30 },
 ];
 
-export default function MoreScreen({ reminder, setReminder, reminderStatus }) {
+export default function MoreScreen({
+  reminder,
+  setReminder,
+  reminderStatus,
+  config,
+  history,
+  today,
+  onRestore,
+}) {
   const [testMsg, setTestMsg] = useState('');
+  const [backupMsg, setBackupMsg] = useState('');
+  const [busy, setBusy] = useState(false);
   const r = reminder;
+
+  const doExport = async () => {
+    tap();
+    setBusy(true);
+    setBackupMsg('');
+    try {
+      await exportBackup({ config, history, today });
+      setBackupMsg(`Backup of ${Object.keys(history).length} days ready.`);
+    } catch (e) {
+      setBackupMsg('Could not create the backup.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const doImport = async () => {
+    tap();
+    setBackupMsg('');
+    try {
+      const backup = await pickBackup();
+      if (!backup) return;
+      Alert.alert(
+        'Restore this backup?',
+        `It has ${backup.days} days of history. Your current goals and history will be replaced. To-dos are kept.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Restore',
+            style: 'destructive',
+            onPress: () => {
+              onRestore(backup);
+              setBackupMsg(`Restored ${backup.days} days.`);
+            },
+          },
+        ]
+      );
+    } catch (e) {
+      setBackupMsg(e.message || 'Could not read that file.');
+    }
+  };
 
   const shift = (minutes) => {
     const total = (r.hour * 60 + r.minute + minutes + 1440) % 1440;
@@ -98,6 +150,51 @@ export default function MoreScreen({ reminder, setReminder, reminderStatus }) {
           style={{ marginTop: space.lg }}
         />
         {!!testMsg && <Text style={[type.small, styles.center]}>{testMsg}</Text>}
+      </Card>
+
+      <SectionLabel style={{ marginTop: space.lg }}>Backup</SectionLabel>
+      <Card>
+        <View style={styles.row}>
+          <View style={styles.iconBox}>
+            <Ionicons name="cloud-upload" size={18} color={colors.accent} />
+          </View>
+          <View style={{ flex: 1, marginLeft: space.md }}>
+            <Text style={type.body}>Your data lives only on this phone</Text>
+            <Text style={type.small}>
+              Save a backup file to Drive, WhatsApp or email. To-dos are not included.
+            </Text>
+          </View>
+        </View>
+        <View style={[styles.row, { marginTop: space.lg }]}>
+          <Button
+            title="Export"
+            icon="download-outline"
+            onPress={doExport}
+            disabled={busy}
+            style={{ flex: 1, marginRight: space.sm }}
+          />
+          <Button
+            title="Import"
+            icon="folder-open-outline"
+            variant="secondary"
+            onPress={doImport}
+            disabled={busy}
+            style={{ flex: 1 }}
+          />
+        </View>
+        {!!backupMsg && <Text style={[type.small, styles.center]}>{backupMsg}</Text>}
+      </Card>
+
+      <SectionLabel style={{ marginTop: space.lg }}>Home-screen widget</SectionLabel>
+      <Card style={styles.row}>
+        <View style={styles.iconBox}>
+          <Ionicons name="apps" size={18} color={colors.accent} />
+        </View>
+        <Text style={[type.small, { flex: 1, marginLeft: space.md }]}>
+          {widgetAvailable
+            ? 'Long-press your home screen → Widgets → ZERO, and drag “ZERO · Today” out. It shows today’s ring and your streak.'
+            : 'Available in the installed app (APK), not in Expo Go. Once installed: long-press home screen → Widgets → ZERO.'}
+        </Text>
       </Card>
 
       <SectionLabel style={{ marginTop: space.lg }}>Quotes</SectionLabel>

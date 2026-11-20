@@ -16,7 +16,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScreenHeader, Card, SectionLabel, Button, Chip, RoundButton, tap } from './ui';
 import { colors, space, radius, type } from '../lib/theme';
-import { ALL_DAYS, newId, daysBetween, REVIEW_EVERY_DAYS, safeTarget } from '../lib/zero';
+import {
+  ALL_DAYS,
+  newId,
+  daysBetween,
+  REVIEW_EVERY_DAYS,
+  safeTarget,
+  MIN_CREDIT,
+} from '../lib/zero';
 
 const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const DAY_LETTER = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
@@ -125,6 +132,7 @@ export default function GoalsScreen({ config, setConfig, today, markReviewed }) 
             const meta = [
               safeTarget(t.target) > 1 ? `${safeTarget(t.target)} ${t.unit || ''}`.trim() : null,
               describeDays(t.days),
+              t.min ? `min: ${t.min}` : null,
             ].filter(Boolean);
             return (
               <Pressable
@@ -205,6 +213,7 @@ function TaskSheet({ editing, onClose, onSave, onDelete }) {
     target: String(editing.task.target ?? 1),
     days: editing.task.days || ALL_DAYS,
     group: editing.task.group || '',
+    min: editing.task.min || '',
   });
   const set = (patch) => setDraft((d) => ({ ...d, ...patch }));
 
@@ -226,6 +235,7 @@ function TaskSheet({ editing, onClose, onSave, onDelete }) {
       target,
       unit: draft.unit.trim(),
       group: draft.group.trim(),
+      min: draft.min.trim(),
     });
 
   return (
@@ -316,6 +326,19 @@ function TaskSheet({ editing, onClose, onSave, onDelete }) {
               <Chip label="Weekdays" active={sameDays(draft.days, WEEKDAYS)} onPress={() => set({ days: WEEKDAYS })} />
               <Chip label="Weekends" active={sameDays(draft.days, WEEKENDS)} onPress={() => set({ days: WEEKENDS })} />
             </View>
+
+            <SectionLabel style={styles.gap}>Minimum version (optional)</SectionLabel>
+            <TextInput
+              style={styles.field}
+              value={draft.min}
+              onChangeText={(min) => set({ min })}
+              placeholder="e.g. Read 1 page"
+              placeholderTextColor={colors.textFaint}
+            />
+            <Text style={styles.help}>
+              For bad days. Doing just the minimum counts as {Math.round(MIN_CREDIT * 100)}% and
+              keeps your streak alive.
+            </Text>
 
             <SectionLabel style={styles.gap}>Pick-one group (optional)</SectionLabel>
             <TextInput
