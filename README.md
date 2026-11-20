@@ -6,32 +6,38 @@ ZERO is a minimal daily-discipline app built with React Native (Expo). You set a
 
 ## ✨ Features
 - **Today's Focus**: daily tasks grouped by goal (Rich, Muscular, Intelligent, Social by default). Expand a goal to work through its tasks.
+- **Pick-one groups**: put tasks in a goal into the same group (e.g. Learning = DSA OR JavaScript). Doing any one completes the group, and the group counts as one part of the goal.
 - **Partial progress**: tasks can have a target and unit (e.g. `2 questions`, `45 min`). Use − / + to log progress; half done counts as half.
 - **Weekday schedules**: each task can run on chosen days only (e.g. workout Mon–Sat, Sunday rest).
 - **"Today I'll also…"**: one flexible task you set each morning, on top of your core tasks.
 - **Goals editor**: add, rename and delete goals and tasks, with their targets, units and days, right in the app.
 - **Monthly review**: every 30 days a reminder asks whether your tasks still fit.
 - **To-do list**: quick everyday items (wash shoes, buy milk). Kept separate from goals and analytics; deleting one removes it completely.
-- **Analytics**: today's score, 7-day average, a "no-zero" streak, a 7-day bar chart and a breakdown for each goal.
-- **Progress ring**, **Quotes** screen, dark UI, splash screen and a slide-out menu
+- **Daily reminder**: a notification every day at 9:30 PM to log your progress (time adjustable, can be turned off)
+- **Stats**: today, 7-day average, streak, 100% days, a 7-day chart, a 5-week heatmap and per-goal progress
+- **Polished dark UI**: bottom tab bar, progress hero card, checkboxes, steppers, task editor sheet, haptic feedback, quote of the day
 - **Offline**: no backend and no account; everything stays on your phone (AsyncStorage)
 
 ## 🛠️ Tech stack
-React Native 0.81 · Expo SDK 54 · React 19 · AsyncStorage · react-native-svg · React Native Paper · Expo Vector Icons
+React Native 0.88 · Expo SDK 58 · React 19 · AsyncStorage · expo-notifications · react-native-svg · Ionicons · expo-haptics
 
 ## 📁 Project structure
 ```
 zero-app/
-├── App.js                   app shell, menu, state and persistence
+├── App.js                   app shell, tab bar, state, persistence, reminder
 ├── lib/
-│   └── zero.js              data model, dates, scoring, migration
+│   ├── zero.js              data model, dates, scoring, streaks, migration
+│   ├── theme.js             colours, spacing, type
+│   ├── notifications.js     daily reminder scheduling
+│   └── quotes.js            quotes and quote of the day
 └── components/
-    ├── HomeScreen.js        today's tasks, progress and the flexible task
+    ├── ui.js                shared UI pieces (cards, checkboxes, buttons…)
+    ├── HomeScreen.js        today: progress, tasks, flexible task
     ├── TodoScreen.js        everyday to-do list
-    ├── GoalsScreen.js       goals and core-task editor
-    ├── AnalyticsScreen.js   scores, streak and charts
-    ├── ProgressRing.js      SVG progress ring
-    └── QuotesScreen.js      motivational quotes
+    ├── GoalsScreen.js       goals list and task editor sheet
+    ├── AnalyticsScreen.js   stats, charts and heatmap
+    ├── MoreScreen.js        reminder settings and quotes
+    └── ProgressRing.js      SVG progress ring
 ```
 
 ## 🚀 Run locally
