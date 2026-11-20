@@ -59,6 +59,11 @@ export default function GoalsScreen({ config, setConfig, today, markReviewed }) 
     updateTask(goalId, t.id, { days: next });
   };
 
+  // Group names already used in a goal, for one-tap reuse.
+  const groupNames = (g) => [
+    ...new Set(g.tasks.map((t) => (t.group || '').trim()).filter(Boolean)),
+  ];
+
   const sinceReview = daysBetween(config.lastReview || today, today);
 
   return (
@@ -66,6 +71,8 @@ export default function GoalsScreen({ config, setConfig, today, markReviewed }) 
       <Text style={styles.heading}>Goals & core tasks</Text>
       <Text style={styles.sub}>
         Your non-negotiables. Change them on purpose, not on a lazy day.
+        {'\n'}Tasks in a goal with the same pick-one group are alternatives:
+        doing any one completes the group.
       </Text>
 
       <View style={styles.reviewBox}>
@@ -126,6 +133,40 @@ export default function GoalsScreen({ config, setConfig, today, markReviewed }) 
                   placeholderTextColor="#555"
                 />
               </View>
+
+              <View style={[styles.row, { marginTop: 8 }]}>
+                <Text style={styles.label}>Pick-one group</Text>
+                <TextInput
+                  style={[styles.input, styles.unit, { marginLeft: 8 }]}
+                  value={t.group || ''}
+                  onChangeText={(group) => updateTask(g.id, t.id, { group })}
+                  placeholder="none (e.g. Learning)"
+                  placeholderTextColor="#555"
+                />
+              </View>
+              {groupNames(g)
+                .filter((name) => name !== (t.group || '').trim())
+                .length > 0 && (
+                <View style={[styles.row, { marginTop: 6, flexWrap: 'wrap' }]}>
+                  {groupNames(g)
+                    .filter((name) => name !== (t.group || '').trim())
+                    .map((name) => (
+                      <TouchableOpacity
+                        key={name}
+                        onPress={() => updateTask(g.id, t.id, { group: name })}
+                        style={styles.groupChip}>
+                        <Text style={styles.groupChipText}>+ {name}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  {!!t.group && (
+                    <TouchableOpacity
+                      onPress={() => updateTask(g.id, t.id, { group: '' })}
+                      style={styles.groupChip}>
+                      <Text style={styles.groupChipText}>no group</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
 
               <View style={[styles.row, { marginTop: 8 }]}>
                 {DAY_LABELS.map((label, day) => {
@@ -200,6 +241,15 @@ const styles = StyleSheet.create({
   dayOn: { backgroundColor: '#4caf50' },
   dayText: { color: '#666', fontSize: 12 },
   dayTextOn: { color: '#000', fontWeight: '700' },
+  groupChip: {
+    backgroundColor: '#0f0f0f',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginRight: 6,
+    marginBottom: 4,
+  },
+  groupChipText: { color: '#aaa', fontSize: 11 },
   addTask: { paddingTop: 8 },
   addGoal: {
     marginTop: 14,

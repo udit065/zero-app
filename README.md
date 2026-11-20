@@ -6,6 +6,7 @@ ZERO is a minimal daily-discipline app built with React Native (Expo). You set a
 
 ## ✨ Features
 - **Today's Focus**: daily tasks grouped by goal (Rich, Muscular, Intelligent, Social by default). Expand a goal to work through its tasks.
+- **Pick-one groups**: put tasks in a goal into the same group (e.g. Learning = DSA OR JavaScript). Doing any one completes the group, and the group counts as one part of the goal.
 - **Partial progress**: tasks can have a target and unit (e.g. `2 questions`, `45 min`). Use − / + to log progress; half done counts as half.
 - **Weekday schedules**: each task can run on chosen days only (e.g. workout Mon–Sat, Sunday rest).
 - **"Today I'll also…"**: one flexible task you set each morning, on top of your core tasks.

@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { dayScore, toKey, DAY_LABELS, weekdayOf } from '../lib/zero';
+import { dayScore, toKey, DAY_LABELS, weekdayOf, unitsOf } from '../lib/zero';
 
 const lastNDays = (today, n) => {
   const [y, m, d] = today.split('-').map(Number);
@@ -24,9 +24,9 @@ export default function AnalyticsScreen({ history, today }) {
   // Per-goal average over the last 7 days.
   const goals = {};
   week.forEach(({ date }) =>
-    (history[date]?.tasks || []).forEach((t) => {
-      const g = (goals[t.goal] = goals[t.goal] || { sum: 0, n: 0 });
-      g.sum += Math.min(t.count, t.target) / t.target;
+    unitsOf(history[date]).forEach((u) => {
+      const g = (goals[u.goal] = goals[u.goal] || { sum: 0, n: 0 });
+      g.sum += u.progress;
       g.n += 1;
     })
   );

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, TextInput, StyleSheet } from 'react-native';
 import ProgressRing from './ProgressRing';
-import { dayScore, stepFor } from '../lib/zero';
+import { dayScore, stepFor, unitsOf } from '../lib/zero';
 
 export default function HomeScreen({
   day,
@@ -15,17 +15,19 @@ export default function HomeScreen({
 }) {
   const [extraDraft, setExtraDraft] = useState('');
 
-  const doneCount = day.tasks.filter((t) => t.count >= t.target).length;
+  // Units = single tasks or "pick one" groups; each counts once.
+  const units = unitsOf(day);
+  const doneCount = units.filter((u) => u.progress >= 1).length;
   const extraSet = !!day.extra.title;
-  const total = day.tasks.length + (extraSet ? 1 : 0);
+  const total = units.length + (extraSet ? 1 : 0);
   const done = doneCount + (extraSet && day.extra.done ? 1 : 0);
 
-  // Group today's tasks by goal, keeping goal order.
+  // Group today's units by goal, keeping goal order.
   const groups = [];
-  day.tasks.forEach((t) => {
-    let g = groups.find((x) => x.id === t.goalId);
-    if (!g) groups.push((g = { id: t.goalId, name: t.goal, tasks: [] }));
-    g.tasks.push(t);
+  units.forEach((u) => {
+    let g = groups.find((x) => x.id === u.goalId);
+    if (!g) groups.push((g = { id: u.goalId, name: u.goal, units: [] }));
+    g.units.push(u);
   });
 
   const saveExtra = () => {
@@ -68,20 +70,27 @@ export default function HomeScreen({
       )}
 
       {groups.map((g) => {
-        const gDone = g.tasks.filter((t) => t.count >= t.target).length;
+        const gDone = g.units.filter((u) => u.progress >= 1).length;
+        const gPct = Math.round(
+          (g.units.reduce((a, u) => a + u.progress, 0) / g.units.length) * 100
+        );
         return (
           <View key={g.id} style={styles.card}>
             <TouchableOpacity style={styles.header} onPress={() => toggleCategory(g.id)}>
               <Text style={styles.title}>{g.name}</Text>
               <Text style={styles.icon}>
-                {gDone}/{g.tasks.length} {expanded[g.id] ? '⌃' : '⌄'}
+                {gDone}/{g.units.length} · {gPct}% {expanded[g.id] ? '⌃' : '⌄'}
               </Text>
             </TouchableOpacity>
 
             {expanded[g.id] &&
-              g.tasks.map((t) => (
-                <TaskRow key={t.id} task={t} setTaskCount={setTaskCount} />
-              ))}
+              g.units.map((u) =>
+                u.group && u.tasks.length > 1 ? (
+                  <PickOneGroup key={u.key} unit={u} setTaskCount={setTaskCount} />
+                ) : (
+                  <TaskRow key={u.key} task={u.tasks[0]} setTaskCount={setTaskCount} />
+                )
+              )}
           </View>
         );
       })}
@@ -123,14 +132,41 @@ export default function HomeScreen({
   );
 }
 
-function TaskRow({ task, setTaskCount }) {
+// A "pick one" group: doing any one option completes it.
+function PickOneGroup({ unit, setTaskCount }) {
+  const full = unit.progress >= 1;
+  const partial = unit.progress > 0 && !full;
+  const color = full ? '#4caf50' : partial ? '#e0a030' : '#ddd';
+  const chosen = unit.tasks.find((t) => t.count >= t.target);
+
+  return (
+    <View style={styles.pickGroup}>
+      <View style={styles.pickHeader}>
+        <Text style={[styles.pickTitle, { color }]}>
+          {full ? '✓ ' : partial ? '◐ ' : '○ '} {unit.group}
+        </Text>
+        <Text style={styles.pickHint}>
+          {full ? `done via ${chosen.title}` : 'pick any one'}
+        </Text>
+      </View>
+      {unit.tasks.map((t, i) => (
+        <View key={t.id}>
+          {i > 0 && <Text style={styles.orText}>OR</Text>}
+          <TaskRow task={t} setTaskCount={setTaskCount} nested dim={full && t !== chosen} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function TaskRow({ task, setTaskCount, nested, dim }) {
   const full = task.count >= task.target;
   const partial = task.count > 0 && !full;
   const color = full ? '#4caf50' : partial ? '#e0a030' : '#ddd';
   const step = stepFor(task.target);
 
   return (
-    <View style={styles.task}>
+    <View style={[styles.task, nested && styles.nestedTask, dim && { opacity: 0.4 }]}>
       {/* Tapping the title marks it fully done / undone */}
       <TouchableOpacity
         style={{ flex: 1 }}
@@ -175,6 +211,33 @@ const styles = StyleSheet.create({
     padding: 12,
     borderTopWidth: 1,
     borderTopColor: '#222',
+  },
+  pickGroup: {
+    borderTopWidth: 1,
+    borderTopColor: '#222',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  pickHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  pickTitle: { fontWeight: '600' },
+  pickHint: { color: '#777', fontSize: 11 },
+  orText: {
+    color: '#555',
+    fontSize: 10,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginVertical: 2,
+  },
+  nestedTask: {
+    borderTopWidth: 0,
+    backgroundColor: '#1d1d1d',
+    borderRadius: 8,
+    paddingVertical: 10,
   },
   stepper: { flexDirection: 'row', alignItems: 'center' },
   stepBtn: {
