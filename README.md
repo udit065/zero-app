@@ -17,7 +17,7 @@ ZERO is a minimal daily-discipline app built with React Native (Expo). You set a
 - **Offline**: no backend and no account; everything stays on your phone (AsyncStorage)
 
 ## 🛠️ Tech stack
-React Native 0.81 · Expo SDK 54 · React 19 · AsyncStorage · react-native-svg · React Native Paper · Expo Vector Icons
+React Native 0.88 · Expo SDK 58 · React 19 · AsyncStorage · react-native-svg
 
 ## 📁 Project structure
 ```
