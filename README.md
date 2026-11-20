@@ -17,7 +17,7 @@ ZERO is a minimal daily-discipline app built with React Native (Expo). You set a
 - **Minimum version for bad days**: give a task a tiny fallback (e.g. "Read 1 page"). Doing it counts as 25% and keeps your streak alive.
 - **Weekly summary**: on Sunday (this week) and Monday (last week), a card with your average, change vs the week before, 100% days, and your strongest and weakest goal.
 - **Backup**: export your goals and history to a file (Drive, WhatsApp, email) and import it again on any phone. To-dos are never included.
-- **Home-screen widget** (installed APK): today's ring, tasks done and streak; tap to open the app.
+- **Home-screen widgets** (installed APK), three layouts: **Buddy** (2×1, streak + nudge + the O buddy), **Ring** (2×2) and **Today** (4×1 slim bar); tap to open the app.
 - **Daily reminder**: a notification every day at 9:30 PM to log your progress (time adjustable, can be turned off)
 - **Stats**: today, 7-day average, streak, 100% days, a 7-day chart, a 5-week heatmap and per-goal progress
 - **Polished dark UI**: bottom tab bar, progress hero card, checkboxes, steppers, task editor sheet, haptic feedback, quote of the day
@@ -47,7 +47,7 @@ zero-app/
     ├── MoreScreen.js        reminder settings and quotes
     └── ProgressRing.js      SVG progress ring
 widget/
-├── ZeroWidget.js            widget layout (Android)
+├── ZeroWidget.js            widget layouts (Android)
 └── summary.js               numbers shown on the widget
 ```
 
@@ -71,7 +71,7 @@ eas build -p android --profile preview
 ```
 When the build finishes, open the link it prints on your phone, download the `.apk` and install it (allow "Install unknown apps" for your browser if asked). Before rebuilding with a new version, bump `version` in `app.json`.
 
-To add the widget: long-press your home screen → **Widgets** → **ZERO** → drag out **ZERO · Today**.
+To add the widget: long-press your home screen → **Widgets** → **ZERO** → drag out **ZERO · Buddy**, **Ring** or **Today**.
 
 ## 🎯 Customizing your tasks
 Open **Goals** from the menu to edit goals and tasks. Changes apply from today onward, and past days keep their history. The starting tasks are set in `defaultConfig` in `lib/zero.js`.
