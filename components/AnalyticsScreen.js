@@ -1,27 +1,24 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { dayScore, toKey, DAY_LABELS, weekdayOf, unitsOf } from '../lib/zero';
+import { Ionicons } from '@expo/vector-icons';
+import { ScreenHeader, Card, SectionLabel, ProgressBar } from './ui';
+import { colors, space, radius, type } from '../lib/theme';
+import { dayScore, DAY_LABELS, weekdayOf, unitsOf, lastNDays, noZeroStreak } from '../lib/zero';
 
-const lastNDays = (today, n) => {
-  const [y, m, d] = today.split('-').map(Number);
-  return Array.from({ length: n }, (_, i) => toKey(new Date(y, m - 1, d - (n - 1 - i))));
-};
+const pct = (v) => `${Math.round(v * 100)}%`;
 
 export default function AnalyticsScreen({ history, today }) {
   const week = lastNDays(today, 7).map((date) => ({
     date,
     score: history[date] ? dayScore(history[date]) : null,
   }));
+  const streak = noZeroStreak(history, today);
 
-  // Streak of days that were not a zero (some progress made). Today counts once started.
-  let streak = 0;
-  for (const date of lastNDays(today, 365).reverse()) {
-    const s = history[date] ? dayScore(history[date]) : 0;
-    if (s > 0) streak++;
-    else if (date !== today) break;
-  }
+  const tracked = week.filter((d) => d.score !== null);
+  const weekAvg = tracked.length ? tracked.reduce((a, d) => a + d.score, 0) / tracked.length : 0;
+  const perfectDays = Object.values(history).filter((d) => dayScore(d) >= 1).length;
 
-  // Per-goal average over the last 7 days.
+  // Per-goal average over the last 7 days (groups count once).
   const goals = {};
   week.forEach(({ date }) =>
     unitsOf(history[date]).forEach((u) => {
@@ -30,112 +27,156 @@ export default function AnalyticsScreen({ history, today }) {
       g.n += 1;
     })
   );
+  const goalRows = Object.entries(goals)
+    .map(([name, g]) => ({ name, v: g.sum / g.n }))
+    .sort((a, b) => b.v - a.v);
 
-  const tracked = week.filter((d) => d.score !== null);
-  const weekAvg = tracked.length
-    ? tracked.reduce((a, d) => a + d.score, 0) / tracked.length
-    : 0;
+  // Last 5 weeks as a heatmap, oldest first.
+  const heat = lastNDays(today, 35).map((date) => ({
+    date,
+    score: history[date] ? dayScore(history[date]) : null,
+  }));
 
   return (
-    <View style={{ padding: 16 }}>
-      <Text style={styles.heading}>Analytics</Text>
+    <View>
+      <ScreenHeader subtitle="Your consistency" title="Stats" />
 
       <View style={styles.stats}>
-        <Stat label="Today" value={pct(history[today] ? dayScore(history[today]) : 0)} />
-        <Stat label="7-day avg" value={pct(weekAvg)} />
-        <Stat label="No-zero streak" value={`${streak}d`} />
+        <Stat icon="today-outline" label="Today" value={pct(history[today] ? dayScore(history[today]) : 0)} />
+        <Stat icon="trending-up" label="7-day avg" value={pct(weekAvg)} />
+        <Stat icon="flame" label="Streak" value={`${streak}d`} accent={streak > 0} />
+        <Stat icon="trophy-outline" label="100% days" value={String(perfectDays)} />
       </View>
 
-      <Text style={styles.sub}>Last 7 days</Text>
-      <View style={styles.chart}>
-        {week.map(({ date, score }) => (
-          <View key={date} style={styles.barCol}>
-            <Text style={styles.barValue}>{score === null ? '–' : pct(score)}</Text>
-            <View style={styles.barTrack}>
-              <View
-                style={[
-                  styles.barFill,
-                  {
-                    height: `${Math.round((score || 0) * 100)}%`,
-                    backgroundColor: date === today ? '#4caf50' : '#2e7d32',
-                  },
-                ]}
-              />
-            </View>
-            <Text style={[styles.barLabel, date === today && { color: '#fff' }]}>
-              {DAY_LABELS[weekdayOf(date)]}
-            </Text>
-          </View>
-        ))}
-      </View>
+      <Card>
+        <SectionLabel>Last 7 days</SectionLabel>
+        <View style={styles.chart}>
+          {week.map(({ date, score }) => {
+            const isToday = date === today;
+            return (
+              <View key={date} style={styles.barCol}>
+                <Text style={styles.barValue}>{score === null ? '' : pct(score)}</Text>
+                <View style={styles.barTrack}>
+                  <View
+                    style={[
+                      styles.barFill,
+                      {
+                        height: `${Math.max(score ? 4 : 0, Math.round((score || 0) * 100))}%`,
+                        backgroundColor: isToday ? colors.accent : colors.accentDark,
+                      },
+                    ]}
+                  />
+                </View>
+                <Text style={[styles.barLabel, isToday && styles.barLabelToday]}>
+                  {DAY_LABELS[weekdayOf(date)]}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+      </Card>
 
-      <Text style={styles.sub}>By goal (last 7 days)</Text>
-      {Object.entries(goals).map(([name, g]) => {
-        const v = g.sum / g.n;
-        return (
+      <Card>
+        <SectionLabel>Last 5 weeks</SectionLabel>
+        <View style={styles.heat}>
+          {heat.map(({ date, score }) => (
+            <View
+              key={date}
+              style={[
+                styles.heatCell,
+                {
+                  backgroundColor:
+                    score === null || score === 0
+                      ? colors.surfaceHigh
+                      : `rgba(76, 199, 100, ${0.25 + score * 0.75})`,
+                },
+                date === today && styles.heatToday,
+              ]}
+            />
+          ))}
+        </View>
+        <View style={styles.legend}>
+          <Text style={type.small}>Less</Text>
+          {[0, 0.33, 0.66, 1].map((v) => (
+            <View
+              key={v}
+              style={[
+                styles.legendCell,
+                { backgroundColor: v === 0 ? colors.surfaceHigh : `rgba(76, 199, 100, ${0.25 + v * 0.75})` },
+              ]}
+            />
+          ))}
+          <Text style={type.small}>More</Text>
+        </View>
+      </Card>
+
+      <Card>
+        <SectionLabel>By goal · last 7 days</SectionLabel>
+        {goalRows.length === 0 && <Text style={type.small}>No data yet.</Text>}
+        {goalRows.map(({ name, v }) => (
           <View key={name} style={styles.goalRow}>
             <View style={styles.goalHead}>
-              <Text style={styles.goalName}>{name}</Text>
+              <Text style={styles.goalName} numberOfLines={1}>
+                {name}
+              </Text>
               <Text style={styles.goalPct}>{pct(v)}</Text>
             </View>
-            <View style={styles.hTrack}>
-              <View style={[styles.hFill, { width: `${Math.round(v * 100)}%` }]} />
-            </View>
+            <ProgressBar value={v} height={8} color={colors.accent} />
           </View>
-        );
-      })}
+        ))}
+      </Card>
     </View>
   );
 }
 
-const pct = (v) => `${Math.round(v * 100)}%`;
-
-function Stat({ label, value }) {
+function Stat({ icon, label, value, accent }) {
   return (
     <View style={styles.stat}>
-      <Text style={styles.statValue}>{value}</Text>
+      <Ionicons name={icon} size={16} color={accent ? colors.warn : colors.textMuted} />
+      <Text style={[styles.statValue, accent && { color: colors.warn }]}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  heading: { color: '#fff', fontSize: 20, fontWeight: '700' },
-  sub: { color: '#aaa', marginTop: 20, marginBottom: 10 },
-  stats: { flexDirection: 'row', marginTop: 12 },
+  stats: { flexDirection: 'row', marginBottom: space.md, marginHorizontal: -space.xs },
   stat: {
     flex: 1,
-    backgroundColor: '#161616',
-    borderRadius: 12,
-    padding: 12,
-    marginRight: 8,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    paddingVertical: space.md,
+    marginHorizontal: space.xs,
     alignItems: 'center',
   },
-  statValue: { color: '#fff', fontSize: 20, fontWeight: '700' },
-  statLabel: { color: '#888', fontSize: 11, marginTop: 4 },
-  chart: {
-    flexDirection: 'row',
-    backgroundColor: '#161616',
-    borderRadius: 12,
-    padding: 12,
-    height: 170,
-  },
+  statValue: { color: colors.text, fontSize: 19, fontWeight: '800', marginTop: 6 },
+  statLabel: { color: colors.textMuted, fontSize: 10, marginTop: 2, fontWeight: '600' },
+
+  chart: { flexDirection: 'row', height: 150 },
   barCol: { flex: 1, alignItems: 'center' },
-  barValue: { color: '#888', fontSize: 9, marginBottom: 4 },
+  barValue: { color: colors.textMuted, fontSize: 9, marginBottom: 4, height: 12 },
   barTrack: {
     flex: 1,
-    width: 16,
-    backgroundColor: '#222',
-    borderRadius: 8,
+    width: 18,
+    backgroundColor: colors.surfaceHigh,
+    borderRadius: 9,
     justifyContent: 'flex-end',
     overflow: 'hidden',
   },
-  barFill: { width: '100%', borderRadius: 8 },
-  barLabel: { color: '#777', fontSize: 11, marginTop: 6 },
-  goalRow: { marginBottom: 12 },
-  goalHead: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
-  goalName: { color: '#ddd', fontSize: 12, flex: 1 },
-  goalPct: { color: '#aaa', fontSize: 12 },
-  hTrack: { height: 8, backgroundColor: '#222', borderRadius: 4, overflow: 'hidden' },
-  hFill: { height: '100%', backgroundColor: '#4caf50' },
+  barFill: { width: '100%', borderRadius: 9 },
+  barLabel: { color: colors.textFaint, fontSize: 11, marginTop: 6, fontWeight: '600' },
+  barLabelToday: { color: colors.accent, fontWeight: '800' },
+
+  heat: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -3 },
+  heatCell: { width: `${100 / 7}%`, aspectRatio: 1, borderRadius: 6, borderWidth: 3, borderColor: colors.surface },
+  heatToday: { borderColor: colors.text, borderWidth: 2 },
+  legend: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: space.sm },
+  legendCell: { width: 12, height: 12, borderRadius: 3, marginHorizontal: 3 },
+
+  goalRow: { marginBottom: space.md },
+  goalHead: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
+  goalName: { ...type.body, fontSize: 13, flex: 1, marginRight: space.sm },
+  goalPct: { color: colors.text, fontSize: 13, fontWeight: '700' },
 });

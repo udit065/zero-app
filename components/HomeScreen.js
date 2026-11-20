@@ -1,89 +1,168 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, TextInput, StyleSheet } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, TouchableOpacity, Pressable, TextInput, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import ProgressRing from './ProgressRing';
-import { dayScore, stepFor, unitsOf } from '../lib/zero';
+import { Card, Check, ProgressBar, Stepper, SectionLabel, Button, tap, success } from './ui';
+import { colors, space, radius, type, progressColor } from '../lib/theme';
+import { dayScore, stepFor, unitsOf, noZeroStreak, taskProgress } from '../lib/zero';
+import { quoteOfTheDay } from '../lib/quotes';
+
+const greeting = () => {
+  const h = new Date().getHours();
+  if (h < 5) return 'Still up?';
+  if (h < 12) return 'Good morning';
+  if (h < 17) return 'Good afternoon';
+  return 'Good evening';
+};
+
+const motivation = (score) => {
+  if (score >= 1) return 'Day complete. Proud of you.';
+  if (score >= 0.75) return 'Almost there. Finish strong.';
+  if (score >= 0.4) return 'Good momentum. Keep going.';
+  if (score > 0) return 'Good start. One more thing.';
+  return 'Everyone starts from zero.';
+};
 
 export default function HomeScreen({
+  today,
   day,
-  expanded,
-  toggleCategory,
+  history,
   setTaskCount,
   setExtra,
   reviewDue,
   onReview,
   onReviewDismiss,
+  openTodos,
+  onOpenTodos,
 }) {
+  const [collapsed, setCollapsed] = useState({});
   const [extraDraft, setExtraDraft] = useState('');
 
   // Units = single tasks or "pick one" groups; each counts once.
   const units = unitsOf(day);
-  const doneCount = units.filter((u) => u.progress >= 1).length;
+  const score = dayScore(day);
   const extraSet = !!day.extra.title;
   const total = units.length + (extraSet ? 1 : 0);
-  const done = doneCount + (extraSet && day.extra.done ? 1 : 0);
+  const done =
+    units.filter((u) => u.progress >= 1).length + (extraSet && day.extra.done ? 1 : 0);
+  const streak = noZeroStreak(history, today);
+
+  // Celebrate the moment the day hits 100%.
+  const prevScore = useRef(score);
+  useEffect(() => {
+    if (prevScore.current < 1 && score >= 1) success();
+    prevScore.current = score;
+  }, [score]);
 
   // Group today's units by goal, keeping goal order.
-  const groups = [];
+  const goals = [];
   units.forEach((u) => {
-    let g = groups.find((x) => x.id === u.goalId);
-    if (!g) groups.push((g = { id: u.goalId, name: u.goal, units: [] }));
+    let g = goals.find((x) => x.id === u.goalId);
+    if (!g) goals.push((g = { id: u.goalId, name: u.goal, units: [] }));
     g.units.push(u);
   });
 
   const saveExtra = () => {
     const title = extraDraft.trim();
     if (!title) return;
+    tap();
     setExtra({ title, done: false });
     setExtraDraft('');
   };
 
-  return (
-    <View style={{ padding: 16 }}>
-      {reviewDue && (
-        <View style={styles.review}>
-          <Text style={styles.reviewText}>
-            Monthly review: are these tasks still what you need?
-          </Text>
-          <View style={styles.reviewRow}>
-            <TouchableOpacity onPress={onReview} style={styles.reviewBtn}>
-              <Text style={styles.reviewBtnText}>Review goals</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={onReviewDismiss} style={styles.reviewBtn}>
-              <Text style={styles.reviewBtnText}>Still good</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
+  const [y, m, d] = today.split('-').map(Number);
+  const dateLabel = new Date(y, m - 1, d).toLocaleDateString('en-GB', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  });
+  const quote = quoteOfTheDay(today);
 
-      <View style={styles.topSection}>
-        <View>
-          <Text style={styles.heading}>Today's Focus</Text>
-          <Text style={styles.sub}>
-            {done}/{total} Tasks Completed
-          </Text>
-        </View>
-        <ProgressRing progress={dayScore(day) * 100} />
+  return (
+    <View>
+      <View style={styles.header}>
+        <Text style={type.caption}>{dateLabel}</Text>
+        <Text style={type.display}>{greeting()}</Text>
       </View>
 
-      {groups.length === 0 && (
-        <Text style={styles.sub}>No tasks scheduled today. Rest day.</Text>
+      {reviewDue && (
+        <Card style={styles.review}>
+          <View style={styles.row}>
+            <Ionicons name="calendar" size={18} color={colors.warn} />
+            <Text style={styles.reviewTitle}>Monthly review</Text>
+          </View>
+          <Text style={styles.reviewText}>
+            It's been a month. Are these tasks still what you need?
+          </Text>
+          <View style={[styles.row, { marginTop: space.md }]}>
+            <Button title="Review goals" onPress={onReview} style={{ flex: 1, marginRight: space.sm }} />
+            <Button title="Still good" variant="secondary" onPress={onReviewDismiss} style={{ flex: 1 }} />
+          </View>
+        </Card>
       )}
 
-      {groups.map((g) => {
-        const gDone = g.units.filter((u) => u.progress >= 1).length;
-        const gPct = Math.round(
-          (g.units.reduce((a, u) => a + u.progress, 0) / g.units.length) * 100
-        );
-        return (
-          <View key={g.id} style={styles.card}>
-            <TouchableOpacity style={styles.header} onPress={() => toggleCategory(g.id)}>
-              <Text style={styles.title}>{g.name}</Text>
-              <Text style={styles.icon}>
-                {gDone}/{g.units.length} · {gPct}% {expanded[g.id] ? '⌃' : '⌄'}
-              </Text>
-            </TouchableOpacity>
+      {/* Hero: today's progress */}
+      <Card style={styles.hero}>
+        <ProgressRing
+          progress={score * 100}
+          size={112}
+          strokeWidth={11}
+          sublabel={`${done} of ${total}`}
+        />
+        <View style={styles.heroText}>
+          <Text style={styles.heroTitle}>{motivation(score)}</Text>
+          <View style={[styles.pill, streak > 0 && styles.pillActive]}>
+            <Ionicons
+              name="flame"
+              size={14}
+              color={streak > 0 ? colors.warn : colors.textFaint}
+            />
+            <Text style={[styles.pillText, streak > 0 && { color: colors.warn }]}>
+              {streak > 0 ? `${streak}-day no-zero streak` : 'No streak yet'}
+            </Text>
+          </View>
+        </View>
+      </Card>
 
-            {expanded[g.id] &&
+      {goals.length === 0 && (
+        <Card style={{ alignItems: 'center' }}>
+          <Ionicons name="bed-outline" size={28} color={colors.textMuted} />
+          <Text style={[type.heading, { marginTop: space.sm }]}>Rest day</Text>
+          <Text style={type.small}>No core tasks scheduled today.</Text>
+        </Card>
+      )}
+
+      {goals.map((g) => {
+        const gProgress = g.units.reduce((a, u) => a + u.progress, 0) / g.units.length;
+        const isCollapsed = collapsed[g.id];
+        return (
+          <Card key={g.id} style={styles.goalCard}>
+            <Pressable
+              onPress={() => {
+                tap();
+                setCollapsed((c) => ({ ...c, [g.id]: !c[g.id] }));
+              }}
+              style={styles.goalHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.goalName} numberOfLines={1}>
+                  {g.name}
+                </Text>
+                <View style={[styles.row, { marginTop: 8 }]}>
+                  <ProgressBar value={gProgress} height={5} color={colors.accent} />
+                  <Text style={[styles.goalPct, { color: progressColor(gProgress) }]}>
+                    {Math.round(gProgress * 100)}%
+                  </Text>
+                </View>
+              </View>
+              <Ionicons
+                name={isCollapsed ? 'chevron-down' : 'chevron-up'}
+                size={18}
+                color={colors.textFaint}
+                style={{ marginLeft: space.md }}
+              />
+            </Pressable>
+
+            {!isCollapsed &&
               g.units.map((u) =>
                 u.group && u.tasks.length > 1 ? (
                   <PickOneGroup key={u.key} unit={u} setTaskCount={setTaskCount} />
@@ -91,42 +170,65 @@ export default function HomeScreen({
                   <TaskRow key={u.key} task={u.tasks[0]} setTaskCount={setTaskCount} />
                 )
               )}
-          </View>
+          </Card>
         );
       })}
 
       {/* One flexible task per day */}
-      <View style={[styles.card, styles.extraCard]}>
-        <Text style={styles.extraLabel}>Today I'll also…</Text>
+      <Card>
+        <SectionLabel>Today I'll also…</SectionLabel>
         {extraSet ? (
-          <View style={styles.extraRow}>
+          <Pressable
+            style={styles.taskRow}
+            onPress={() => {
+              tap();
+              setExtra({ ...day.extra, done: !day.extra.done });
+            }}>
+            <Check progress={day.extra.done ? 1 : 0} />
+            <Text style={[styles.taskTitle, day.extra.done && styles.doneText]}>
+              {day.extra.title}
+            </Text>
             <TouchableOpacity
-              style={{ flex: 1 }}
-              onPress={() => setExtra({ ...day.extra, done: !day.extra.done })}>
-              <Text style={{ color: day.extra.done ? '#4caf50' : '#ddd' }}>
-                {day.extra.done ? '✓ ' : '○ '} {day.extra.title}
-              </Text>
+              hitSlop={10}
+              onPress={() => setExtra({ title: '', done: false })}>
+              <Ionicons name="close" size={18} color={colors.textFaint} />
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => setExtra({ title: '', done: false })}>
-              <Text style={styles.remove}>✕</Text>
-            </TouchableOpacity>
-          </View>
+          </Pressable>
         ) : (
-          <View style={styles.extraRow}>
+          <View style={styles.row}>
             <TextInput
               style={styles.input}
-              placeholder="e.g. Fix the login bug"
-              placeholderTextColor="#555"
+              placeholder="One more thing for today"
+              placeholderTextColor={colors.textFaint}
               value={extraDraft}
               onChangeText={setExtraDraft}
               onSubmitEditing={saveExtra}
               returnKeyType="done"
             />
-            <TouchableOpacity onPress={saveExtra} style={styles.setBtn}>
-              <Text style={styles.setBtnText}>Set</Text>
+            <TouchableOpacity
+              onPress={saveExtra}
+              style={[styles.addBtn, !extraDraft.trim() && { opacity: 0.4 }]}>
+              <Ionicons name="add" size={22} color="#04140a" />
             </TouchableOpacity>
           </View>
         )}
+      </Card>
+
+      {openTodos > 0 && (
+        <Pressable onPress={onOpenTodos}>
+          <Card style={[styles.row, { paddingVertical: space.md }]}>
+            <Ionicons name="checkbox-outline" size={20} color={colors.textMuted} />
+            <Text style={[type.body, { flex: 1, marginLeft: space.md }]}>
+              {openTodos} open to-do{openTodos > 1 ? 's' : ''}
+            </Text>
+            <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
+          </Card>
+        </Pressable>
+      )}
+
+      <View style={styles.quote}>
+        <Ionicons name="chatbubble-ellipses-outline" size={16} color={colors.accent} />
+        <Text style={styles.quoteText}>“{quote.text}”</Text>
       </View>
     </View>
   );
@@ -135,163 +237,163 @@ export default function HomeScreen({
 // A "pick one" group: doing any one option completes it.
 function PickOneGroup({ unit, setTaskCount }) {
   const full = unit.progress >= 1;
-  const partial = unit.progress > 0 && !full;
-  const color = full ? '#4caf50' : partial ? '#e0a030' : '#ddd';
   const chosen = unit.tasks.find((t) => t.count >= t.target);
 
   return (
-    <View style={styles.pickGroup}>
+    <View style={[styles.pickGroup, full && { borderColor: 'rgba(76,199,100,0.35)' }]}>
       <View style={styles.pickHeader}>
-        <Text style={[styles.pickTitle, { color }]}>
-          {full ? '✓ ' : partial ? '◐ ' : '○ '} {unit.group}
+        <Text style={[styles.pickTitle, { color: progressColor(unit.progress) }]}>
+          {unit.group}
         </Text>
         <Text style={styles.pickHint}>
-          {full ? `done via ${chosen.title}` : 'pick any one'}
+          {full ? `✓ done via ${chosen.title}` : 'pick any one'}
         </Text>
       </View>
       {unit.tasks.map((t, i) => (
         <View key={t.id}>
-          {i > 0 && <Text style={styles.orText}>OR</Text>}
-          <TaskRow task={t} setTaskCount={setTaskCount} nested dim={full && t !== chosen} />
+          {i > 0 && (
+            <View style={styles.orRow}>
+              <View style={styles.orLine} />
+              <Text style={styles.orText}>OR</Text>
+              <View style={styles.orLine} />
+            </View>
+          )}
+          <TaskRow task={t} setTaskCount={setTaskCount} dim={full && t !== chosen} nested />
         </View>
       ))}
     </View>
   );
 }
 
-function TaskRow({ task, setTaskCount, nested, dim }) {
-  const full = task.count >= task.target;
-  const partial = task.count > 0 && !full;
-  const color = full ? '#4caf50' : partial ? '#e0a030' : '#ddd';
-  const step = stepFor(task.target);
+function TaskRow({ task, setTaskCount, dim, nested }) {
+  const p = taskProgress(task);
+  const full = p >= 1;
 
   return (
-    <View style={[styles.task, nested && styles.nestedTask, dim && { opacity: 0.4 }]}>
-      {/* Tapping the title marks it fully done / undone */}
-      <TouchableOpacity
-        style={{ flex: 1 }}
-        onPress={() => setTaskCount(task.id, full ? 0 : task.target)}>
-        <Text style={{ color }}>
-          {full ? '✓ ' : partial ? '◐ ' : '○ '} {task.title}
+    <Pressable
+      // Tapping the row marks it fully done / undone.
+      onPress={() => {
+        tap();
+        setTaskCount(task.id, full ? 0 : task.target);
+      }}
+      style={[styles.taskRow, nested && styles.nestedRow, dim && { opacity: 0.4 }]}>
+      <Check progress={p} />
+      <View style={{ flex: 1, marginLeft: space.md }}>
+        <Text style={[styles.taskTitle, { marginLeft: 0 }, full && styles.doneText]}>
+          {task.title}
         </Text>
-      </TouchableOpacity>
-
-      {task.target > 1 && (
-        <View style={styles.stepper}>
-          <TouchableOpacity
-            onPress={() => setTaskCount(task.id, task.count - step)}
-            style={styles.stepBtn}>
-            <Text style={styles.stepText}>−</Text>
-          </TouchableOpacity>
-          <Text style={[styles.count, { color }]}>
-            {task.count}/{task.target}
+        {task.target > 1 && (
+          <Text style={styles.taskSub}>
+            Goal: {task.target}
             {task.unit ? ` ${task.unit}` : ''}
           </Text>
-          <TouchableOpacity
-            onPress={() => setTaskCount(task.id, task.count + step)}
-            style={styles.stepBtn}>
-            <Text style={styles.stepText}>+</Text>
-          </TouchableOpacity>
-        </View>
+        )}
+      </View>
+      {task.target > 1 && (
+        <Stepper
+          value={task.count}
+          target={task.target}
+          unit=""
+          step={stepFor(task.target)}
+          onChange={(v) => setTaskCount(task.id, v)}
+        />
       )}
-    </View>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  heading: { color: '#fff', fontSize: 20, fontWeight: '700' },
-  sub: { color: '#888', marginBottom: 10 },
-  card: { backgroundColor: '#161616', borderRadius: 12, marginTop: 10 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', padding: 12 },
-  title: { color: '#fff', flex: 1 },
-  icon: { color: '#aaa' },
-  task: {
+  header: { marginTop: space.sm, marginBottom: space.lg },
+  row: { flexDirection: 'row', alignItems: 'center' },
+
+  review: { backgroundColor: colors.warnSoft, borderColor: 'rgba(232,163,61,0.35)' },
+  reviewTitle: { ...type.heading, color: colors.warn, marginLeft: space.sm },
+  reviewText: { ...type.small, color: '#e8cf9f', marginTop: space.xs },
+
+  hero: { flexDirection: 'row', alignItems: 'center', padding: space.xl },
+  heroText: { flex: 1, marginLeft: space.xl },
+  heroTitle: { ...type.title, fontSize: 18, lineHeight: 24 },
+  pill: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#222',
+    alignSelf: 'flex-start',
+    backgroundColor: colors.surfaceHigh,
+    borderRadius: radius.pill,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    marginTop: space.md,
   },
+  pillActive: { backgroundColor: colors.warnSoft },
+  pillText: { color: colors.textFaint, fontSize: 12, fontWeight: '700', marginLeft: 5 },
+
+  goalCard: { paddingBottom: space.sm },
+  goalHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: space.sm },
+  goalName: { ...type.heading, fontSize: 15 },
+  goalPct: { fontSize: 12, fontWeight: '700', marginLeft: space.sm, width: 38, textAlign: 'right' },
+
+  taskRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  nestedRow: { borderTopWidth: 0, paddingVertical: 8 },
+  taskTitle: { ...type.body, flex: 1, marginLeft: space.md },
+  taskSub: { ...type.small, fontSize: 12, marginTop: 2 },
+  doneText: { color: colors.textMuted, textDecorationLine: 'line-through' },
+
   pickGroup: {
-    borderTopWidth: 1,
-    borderTopColor: '#222',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    marginVertical: space.sm,
+    backgroundColor: colors.bg,
   },
   pickHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 6,
+    paddingVertical: 4,
   },
-  pickTitle: { fontWeight: '600' },
-  pickHint: { color: '#777', fontSize: 11 },
-  orText: {
-    color: '#555',
-    fontSize: 10,
-    fontWeight: '700',
-    textAlign: 'center',
-    marginVertical: 2,
-  },
-  nestedTask: {
-    borderTopWidth: 0,
-    backgroundColor: '#1d1d1d',
-    borderRadius: 8,
+  pickTitle: { fontSize: 12, fontWeight: '800', letterSpacing: 1, textTransform: 'uppercase' },
+  pickHint: { color: colors.textMuted, fontSize: 11, flexShrink: 1, marginLeft: space.sm },
+  orRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 2 },
+  orLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
+  orText: { color: colors.textFaint, fontSize: 10, fontWeight: '800', marginHorizontal: space.sm },
+
+  input: {
+    flex: 1,
+    ...type.body,
+    backgroundColor: colors.bg,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: space.md,
     paddingVertical: 10,
   },
-  stepper: { flexDirection: 'row', alignItems: 'center' },
-  stepBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#222',
+  addBtn: {
+    marginLeft: space.sm,
+    width: 44,
+    height: 44,
+    borderRadius: radius.md,
+    backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  stepText: { color: '#fff', fontSize: 16 },
-  count: { fontSize: 12, marginHorizontal: 8, minWidth: 60, textAlign: 'center' },
-  topSection: {
+
+  quote: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 15,
+    paddingHorizontal: space.sm,
+    paddingTop: space.md,
   },
-  extraCard: { padding: 12, borderLeftWidth: 3, borderLeftColor: '#4caf50' },
-  extraLabel: { color: '#aaa', fontSize: 12, marginBottom: 8 },
-  extraRow: { flexDirection: 'row', alignItems: 'center' },
-  input: {
+  quoteText: {
+    ...type.small,
+    fontStyle: 'italic',
     flex: 1,
-    color: '#fff',
-    backgroundColor: '#0f0f0f',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    marginLeft: space.sm,
+    lineHeight: 19,
   },
-  setBtn: {
-    marginLeft: 8,
-    backgroundColor: '#4caf50',
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  setBtnText: { color: '#000', fontWeight: '700' },
-  remove: { color: '#777', fontSize: 16, paddingHorizontal: 8 },
-  review: {
-    backgroundColor: '#1f1a0d',
-    borderColor: '#e0a030',
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 15,
-  },
-  reviewText: { color: '#f0d090', marginBottom: 10 },
-  reviewRow: { flexDirection: 'row' },
-  reviewBtn: {
-    backgroundColor: '#2a2414',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    marginRight: 8,
-  },
-  reviewBtnText: { color: '#f0d090', fontWeight: '600' },
 });

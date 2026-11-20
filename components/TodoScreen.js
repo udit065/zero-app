@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Pressable, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { ScreenHeader, Card, Check, SectionLabel, EmptyState, tap } from './ui';
+import { colors, space, radius, type } from '../lib/theme';
 import { newId } from '../lib/zero';
 
 // Quick everyday to-dos (wash shoes, buy XYZ...).
@@ -11,97 +14,134 @@ export default function TodoScreen({ todos, setTodos }) {
   const add = () => {
     const t = text.trim();
     if (!t) return;
+    tap();
     setTodos((list) => [{ id: newId(), text: t, done: false }, ...list]);
     setText('');
   };
 
-  const toggle = (id) =>
+  const toggle = (id) => {
+    tap();
     setTodos((list) => list.map((x) => (x.id === id ? { ...x, done: !x.done } : x)));
+  };
 
-  const remove = (id) => setTodos((list) => list.filter((x) => x.id !== id));
+  const remove = (id) => {
+    tap();
+    setTodos((list) => list.filter((x) => x.id !== id));
+  };
 
-  const clearDone = () => setTodos((list) => list.filter((x) => !x.done));
+  const clearDone = () => {
+    tap();
+    setTodos((list) => list.filter((x) => !x.done));
+  };
 
   const open = todos.filter((t) => !t.done);
   const done = todos.filter((t) => t.done);
 
   return (
-    <View style={{ padding: 16 }}>
-      <Text style={styles.heading}>To-do</Text>
-      <Text style={styles.sub}>Quick everyday things. Not tracked anywhere.</Text>
+    <View>
+      <ScreenHeader
+        subtitle={open.length ? `${open.length} open` : 'All clear'}
+        title="To-do"
+      />
 
       <View style={styles.addRow}>
         <TextInput
           style={styles.input}
           placeholder="Wash shoes, buy milk…"
-          placeholderTextColor="#555"
+          placeholderTextColor={colors.textFaint}
           value={text}
           onChangeText={setText}
           onSubmitEditing={add}
           returnKeyType="done"
           blurOnSubmit={false}
         />
-        <TouchableOpacity onPress={add} style={styles.addBtn}>
-          <Text style={styles.addBtnText}>Add</Text>
+        <TouchableOpacity
+          onPress={add}
+          style={[styles.addBtn, !text.trim() && { opacity: 0.4 }]}>
+          <Ionicons name="add" size={24} color="#04140a" />
         </TouchableOpacity>
       </View>
 
-      {todos.length === 0 && <Text style={styles.empty}>Nothing to do. Nice.</Text>}
+      {todos.length === 0 && (
+        <EmptyState
+          icon="sparkles-outline"
+          title="Nothing to do"
+          text="Add quick everyday things here. They're not tracked anywhere, and deleting one removes it for good."
+        />
+      )}
 
-      {[...open, ...done].map((t) => (
-        <View key={t.id} style={styles.item}>
-          <TouchableOpacity style={{ flex: 1 }} onPress={() => toggle(t.id)}>
-            <Text style={[styles.itemText, t.done && styles.itemDone]}>
-              {t.done ? '✓ ' : '○ '} {t.text}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => remove(t.id)} hitSlop={10}>
-            <Text style={styles.remove}>✕</Text>
-          </TouchableOpacity>
-        </View>
-      ))}
+      {open.length > 0 && (
+        <Card style={styles.list}>
+          {open.map((t, i) => (
+            <TodoRow key={t.id} todo={t} first={i === 0} onToggle={toggle} onRemove={remove} />
+          ))}
+        </Card>
+      )}
 
       {done.length > 0 && (
-        <TouchableOpacity onPress={clearDone} style={styles.clearBtn}>
-          <Text style={styles.clearText}>Delete {done.length} completed</Text>
-        </TouchableOpacity>
+        <>
+          <View style={styles.doneHeader}>
+            <SectionLabel style={{ marginBottom: 0 }}>Completed · {done.length}</SectionLabel>
+            <TouchableOpacity onPress={clearDone} hitSlop={8}>
+              <Text style={styles.clear}>Delete all</Text>
+            </TouchableOpacity>
+          </View>
+          <Card style={styles.list}>
+            {done.map((t, i) => (
+              <TodoRow key={t.id} todo={t} first={i === 0} onToggle={toggle} onRemove={remove} />
+            ))}
+          </Card>
+        </>
       )}
     </View>
   );
 }
 
+function TodoRow({ todo, first, onToggle, onRemove }) {
+  return (
+    <Pressable onPress={() => onToggle(todo.id)} style={[styles.item, !first && styles.divider]}>
+      <Check progress={todo.done ? 1 : 0} size={22} />
+      <Text style={[styles.itemText, todo.done && styles.itemDone]}>{todo.text}</Text>
+      <TouchableOpacity onPress={() => onRemove(todo.id)} hitSlop={10} style={styles.trash}>
+        <Ionicons name="trash-outline" size={18} color={colors.textFaint} />
+      </TouchableOpacity>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
-  heading: { color: '#fff', fontSize: 20, fontWeight: '700' },
-  sub: { color: '#777', marginBottom: 14, fontSize: 12 },
-  addRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  addRow: { flexDirection: 'row', alignItems: 'center', marginBottom: space.lg },
   input: {
     flex: 1,
-    color: '#fff',
-    backgroundColor: '#161616',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    ...type.body,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: space.lg,
+    paddingVertical: 13,
   },
   addBtn: {
-    marginLeft: 8,
-    backgroundColor: '#4caf50',
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  addBtnText: { color: '#000', fontWeight: '700' },
-  empty: { color: '#555', marginTop: 10 },
-  item: {
-    flexDirection: 'row',
+    marginLeft: space.sm,
+    width: 50,
+    height: 50,
+    borderRadius: radius.md,
+    backgroundColor: colors.accent,
     alignItems: 'center',
-    backgroundColor: '#161616',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 8,
+    justifyContent: 'center',
   },
-  itemText: { color: '#ddd' },
-  itemDone: { color: '#4caf50', textDecorationLine: 'line-through' },
-  remove: { color: '#777', fontSize: 16, paddingHorizontal: 6 },
-  clearBtn: { alignSelf: 'flex-start', marginTop: 6, paddingVertical: 6 },
-  clearText: { color: '#e57373' },
+  list: { paddingVertical: space.xs },
+  item: { flexDirection: 'row', alignItems: 'center', paddingVertical: 13 },
+  divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  itemText: { ...type.body, flex: 1, marginLeft: space.md },
+  itemDone: { color: colors.textMuted, textDecorationLine: 'line-through' },
+  trash: { paddingLeft: space.sm },
+  doneHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: space.sm,
+    marginBottom: space.sm,
+  },
+  clear: { color: colors.danger, fontSize: 13, fontWeight: '600' },
 });

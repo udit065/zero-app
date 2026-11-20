@@ -2,20 +2,27 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
-  TouchableOpacity,
+  Pressable,
   StyleSheet,
   ScrollView,
-  ActivityIndicator,
-  Dimensions,
   AppState,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import HomeScreen from './components/HomeScreen';
 import TodoScreen from './components/TodoScreen';
 import AnalyticsScreen from './components/AnalyticsScreen';
 import GoalsScreen from './components/GoalsScreen';
-import QuotesScreen from './components/QuotesScreen';
+import MoreScreen from './components/MoreScreen';
+import ProgressRing from './components/ProgressRing';
+import { tap } from './components/ui';
+import { colors, space } from './lib/theme';
+import { applyReminder, DEFAULT_REMINDER } from './lib/notifications';
 import {
   getToday,
   defaultConfig,
@@ -25,21 +32,36 @@ import {
   REVIEW_EVERY_DAYS,
 } from './lib/zero';
 
-const SCREEN_WIDTH = Dimensions.get('window').width;
-const MENU = ['HOME', 'TODO', 'GOALS', 'QUOTES', 'ANALYTICS'];
+const TABS = [
+  { key: 'HOME', label: 'Today', icon: 'sunny' },
+  { key: 'TODO', label: 'To-do', icon: 'checkbox' },
+  { key: 'GOALS', label: 'Goals', icon: 'flag' },
+  { key: 'ANALYTICS', label: 'Stats', icon: 'stats-chart' },
+  { key: 'MORE', label: 'More', icon: 'ellipsis-horizontal-circle' },
+];
 
 const KEYS = { config: 'zeroConfig', history: 'zeroData', todos: 'zeroTodos' };
 
 export default function App() {
+  return (
+    <SafeAreaProvider>
+      <StatusBar style="light" />
+      <Zero />
+    </SafeAreaProvider>
+  );
+}
+
+function Zero() {
+  const insets = useSafeAreaInsets();
+  const scrollRef = useRef(null);
   const [activeTab, setActiveTab] = useState('HOME');
-  const [menuOpen, setMenuOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [today, setToday] = useState(getToday());
 
   const [config, setConfig] = useState(null);
   const [history, setHistory] = useState({});
   const [todos, setTodos] = useState([]);
-  const [expanded, setExpanded] = useState({});
+  const [reminderStatus, setReminderStatus] = useState(null);
 
   // Nothing is written to storage until loading has finished, so
   // saved progress can never be overwritten by the defaults.
@@ -63,6 +85,7 @@ export default function App() {
         AsyncStorage.getItem(KEYS.todos),
       ]);
       const cfg = rawConfig ? JSON.parse(rawConfig) : defaultConfig(t);
+      if (!cfg.reminder) cfg.reminder = DEFAULT_REMINDER;
       const hist = {};
       Object.entries(rawHistory ? JSON.parse(rawHistory) : {}).forEach(
         ([date, day]) => (hist[date] = migrateDay(day))
@@ -74,12 +97,12 @@ export default function App() {
       setTodos(rawTodos ? JSON.parse(rawTodos) : []);
     } catch (e) {
       console.log(e);
-      const cfg = defaultConfig(t);
+      const cfg = { ...defaultConfig(t), reminder: DEFAULT_REMINDER };
       setConfig(cfg);
       setHistory({ [t]: buildDay(cfg, t) });
     } finally {
       loaded.current = true;
-      setTimeout(() => setLoading(false), 800);
+      setTimeout(() => setLoading(false), 700);
     }
   };
 
@@ -88,6 +111,18 @@ export default function App() {
     if (!config) return;
     setHistory((h) => ({ ...h, [today]: buildDay(config, today, h[today]) }));
   }, [config, today]);
+
+  // (Re)schedule the daily reminder whenever its settings change.
+  const reminderKey = config?.reminder ? JSON.stringify(config.reminder) : null;
+  useEffect(() => {
+    if (!reminderKey) return;
+    applyReminder(config.reminder)
+      .then(setReminderStatus)
+      .catch((e) => {
+        console.log(e);
+        setReminderStatus('error');
+      });
+  }, [reminderKey]);
 
   // Persist each piece separately.
   useEffect(() => {
@@ -103,8 +138,7 @@ export default function App() {
       AsyncStorage.setItem(KEYS.todos, JSON.stringify(todos)).catch(console.log);
   }, [todos]);
 
-  const updateToday = (fn) =>
-    setHistory((h) => ({ ...h, [today]: fn(h[today]) }));
+  const updateToday = (fn) => setHistory((h) => ({ ...h, [today]: fn(h[today]) }));
 
   const setTaskCount = (id, count) =>
     updateToday((day) => ({
@@ -115,135 +149,142 @@ export default function App() {
     }));
 
   const setExtra = (extra) => updateToday((day) => ({ ...day, extra }));
-
   const markReviewed = () => setConfig((c) => ({ ...c, lastReview: today }));
+  const setReminder = (reminder) => setConfig((c) => ({ ...c, reminder }));
 
-  const toggleCategory = (goalId) =>
-    setExpanded((prev) => ({ ...prev, [goalId]: !prev[goalId] }));
+  const goTo = (tab) => {
+    setActiveTab(tab);
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
+  };
 
   if (loading || !config || !history[today]) {
     return (
       <View style={styles.splash}>
+        <ProgressRing progress={72} size={96} strokeWidth={10} showLabel={false} />
         <Text style={styles.splashTitle}>ZERO</Text>
         <Text style={styles.splashTagline}>Everyone starts from zero</Text>
-        <ActivityIndicator color="#fff" />
       </View>
     );
   }
 
-  const reviewDue =
-    daysBetween(config.lastReview || today, today) >= REVIEW_EVERY_DAYS;
+  const reviewDue = daysBetween(config.lastReview || today, today) >= REVIEW_EVERY_DAYS;
+  const openTodos = todos.filter((t) => !t.done).length;
 
   return (
-    <View style={styles.container}>
-      {/* Top Bar */}
-      <View style={styles.topBar}>
-        <TouchableOpacity onPress={() => setMenuOpen(true)}>
-          <Text style={styles.menuIcon}>☰</Text>
-        </TouchableOpacity>
-        <Text style={styles.logo}>ZERO</Text>
-        <View style={{ width: 20 }} />
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView
+          ref={scrollRef}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.content}>
+          {activeTab === 'HOME' && (
+            <HomeScreen
+              today={today}
+              day={history[today]}
+              history={history}
+              setTaskCount={setTaskCount}
+              setExtra={setExtra}
+              reviewDue={reviewDue}
+              onReview={() => goTo('GOALS')}
+              onReviewDismiss={markReviewed}
+              openTodos={openTodos}
+              onOpenTodos={() => goTo('TODO')}
+            />
+          )}
+          {activeTab === 'TODO' && <TodoScreen todos={todos} setTodos={setTodos} />}
+          {activeTab === 'GOALS' && (
+            <GoalsScreen
+              config={config}
+              setConfig={setConfig}
+              today={today}
+              markReviewed={markReviewed}
+            />
+          )}
+          {activeTab === 'ANALYTICS' && <AnalyticsScreen history={history} today={today} />}
+          {activeTab === 'MORE' && (
+            <MoreScreen
+              reminder={config.reminder}
+              setReminder={setReminder}
+              reminderStatus={reminderStatus}
+            />
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
+
+      {/* Bottom tab bar */}
+      <View style={[styles.tabBar, { paddingBottom: Math.max(insets.bottom, 8) }]}>
+        {TABS.map((t) => {
+          const active = activeTab === t.key;
+          return (
+            <Pressable
+              key={t.key}
+              style={styles.tab}
+              onPress={() => {
+                if (!active) tap();
+                goTo(t.key);
+              }}>
+              <View>
+                <Ionicons
+                  name={active ? t.icon : `${t.icon}-outline`}
+                  size={23}
+                  color={active ? colors.accent : colors.textFaint}
+                />
+                {t.key === 'TODO' && openTodos > 0 && (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>{openTodos > 9 ? '9+' : openTodos}</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={[styles.tabLabel, active && { color: colors.accent }]}>
+                {t.label}
+              </Text>
+            </Pressable>
+          );
+        })}
       </View>
-
-      {/* Screens */}
-      <ScrollView keyboardShouldPersistTaps="handled">
-        {activeTab === 'HOME' && (
-          <HomeScreen
-            day={history[today]}
-            expanded={expanded}
-            toggleCategory={toggleCategory}
-            setTaskCount={setTaskCount}
-            setExtra={setExtra}
-            reviewDue={reviewDue}
-            onReview={() => setActiveTab('GOALS')}
-            onReviewDismiss={markReviewed}
-          />
-        )}
-        {activeTab === 'TODO' && <TodoScreen todos={todos} setTodos={setTodos} />}
-        {activeTab === 'GOALS' && (
-          <GoalsScreen
-            config={config}
-            setConfig={setConfig}
-            today={today}
-            markReviewed={markReviewed}
-          />
-        )}
-        {activeTab === 'QUOTES' && <QuotesScreen />}
-        {activeTab === 'ANALYTICS' && (
-          <AnalyticsScreen history={history} today={today} />
-        )}
-      </ScrollView>
-
-      {/* Drawer Menu */}
-      {menuOpen && (
-        <>
-          <TouchableOpacity
-            style={styles.overlay}
-            onPress={() => setMenuOpen(false)}
-          />
-          <View style={styles.drawer}>
-            <Text style={styles.drawerTitle}>ZERO</Text>
-            {MENU.map((item) => (
-              <TouchableOpacity
-                key={item}
-                onPress={() => {
-                  setActiveTab(item);
-                  setMenuOpen(false);
-                }}
-                style={styles.drawerItem}>
-                <Text
-                  style={[
-                    styles.drawerText,
-                    activeTab === item && styles.drawerTextActive,
-                  ]}>
-                  {item}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </>
-      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0b0b0b', paddingTop: 40 },
+  container: { flex: 1, backgroundColor: colors.bg },
+  content: { padding: space.lg, paddingBottom: space.xxl },
   splash: {
     flex: 1,
-    backgroundColor: '#0b0b0b',
+    backgroundColor: colors.bg,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  splashTitle: { color: '#fff', fontSize: 40, fontWeight: 'bold' },
-  splashTagline: { color: '#777', marginBottom: 10 },
-  topBar: {
+  splashTitle: {
+    color: colors.text,
+    fontSize: 34,
+    fontWeight: '800',
+    letterSpacing: 6,
+    marginTop: space.xl,
+  },
+  splashTagline: { color: colors.textMuted, marginTop: space.xs },
+  tabBar: {
     flexDirection: 'row',
+    backgroundColor: colors.surface,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    paddingTop: 8,
+  },
+  tab: { flex: 1, alignItems: 'center' },
+  tabLabel: { fontSize: 11, color: colors.textFaint, marginTop: 3, fontWeight: '600' },
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -10,
+    minWidth: 17,
+    height: 17,
+    borderRadius: 9,
+    backgroundColor: colors.danger,
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    marginBottom: 10,
+    justifyContent: 'center',
+    paddingHorizontal: 3,
   },
-  menuIcon: { color: '#fff', fontSize: 22 },
-  logo: { color: '#fff', fontSize: 18, fontWeight: '700' },
-  drawer: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    width: SCREEN_WIDTH * 0.7,
-    height: '100%',
-    backgroundColor: '#161616',
-    paddingTop: 60,
-    paddingHorizontal: 20,
-  },
-  drawerTitle: { color: '#fff', fontSize: 22, fontWeight: 'bold', marginBottom: 20 },
-  drawerItem: { paddingVertical: 14 },
-  drawerText: { color: '#ddd', fontSize: 16 },
-  drawerTextActive: { color: '#4caf50', fontWeight: '700' },
-  overlay: {
-    position: 'absolute',
-    width: '100%',
-    height: '100%',
-    backgroundColor: 'rgba(0,0,0,0.6)',
-  },
+  badgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
 });
